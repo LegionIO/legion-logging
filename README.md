@@ -29,6 +29,16 @@ Legion::Logging.error('something went wrong')
 Legion::Logging.fatal('critical failure')
 ```
 
+### Structured JSON Output
+
+Pass `format: :json` to disable colorization and emit machine-parseable JSON log lines:
+
+```ruby
+Legion::Logging.setup(level: 'info', format: :json)
+```
+
+This is useful for log aggregation pipelines (Elasticsearch, Splunk, etc.).
+
 ## Requirements
 
 - Ruby >= 3.4
