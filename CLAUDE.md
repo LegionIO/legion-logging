@@ -1,14 +1,13 @@
 # legion-logging: Logging Framework for LegionIO
 
 **Repository Level 3 Documentation**
-- **Category**: `/Users/miverso2/rubymine/arc/CLAUDE.md`
-- **Workspace**: `/Users/miverso2/rubymine/CLAUDE.md`
+- **Parent**: `/Users/miverso2/rubymine/legion/CLAUDE.md`
 
 ## Purpose
 
-Ruby logging class for the LegionIO framework. Provides colorized console output via Rainbow and a consistent logging interface across all Legion gems and extensions.
+Ruby logging class for the LegionIO framework. Provides colorized console output via Rainbow, structured JSON logging (`format: :json`), and a consistent logging interface across all Legion gems and extensions.
 
-**GitHub**: https://github.com/Optum/legion-logging
+**GitHub**: https://github.com/LegionIO/legion-logging
 **License**: Apache-2.0
 
 ## Architecture
@@ -26,7 +25,8 @@ Legion::Logging (singleton module)
 - **Singleton Module**: `Legion::Logging` uses `class << self` - called directly: `Legion::Logging.info("msg")`
 - **Rainbow Colorization**: Console output uses Rainbow gem for colored terminal output
 - **Setup Method**: `Legion::Logging.setup(log_file:, level:)` configures output destination and level
-- **Shared Interface**: Same method signature (`info`, `warn`, `error`, etc.) as `Optum::Logger` - the two gems share conceptual patterns
+- **Structured JSON**: `format: :json` in settings outputs machine-parseable JSON log lines
+- **Shared Interface**: Same method signature (`info`, `warn`, `error`, etc.) across all Legion components
 
 ## Dependencies
 
