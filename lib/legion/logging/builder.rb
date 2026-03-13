@@ -35,12 +35,13 @@ module Legion
         log.formatter = proc do |severity, datetime, _progname, msg|
           options[:lex_name] = options.key?(:lex) ? "[#{options[:lex]}]" : nil
           unless options[:lex_name].nil?
-            data = caller_locations[4].to_s.split('/').last(2)
+            loc  = caller_locations[4]
+            path = loc.to_s.split('/').last(2)
             runner_trace = {
-              type:        data[0],
-              file:        data[1].split('.')[0],
-              function:    data[1].split('`')[1].delete_suffix('\''),
-              line_number: data[1].split(':')[1]
+              type:        path[0],
+              file:        File.basename(loc.path, '.*'),
+              function:    loc.base_label,
+              line_number: loc.lineno
             }
           end
           string = "[#{datetime}]"
