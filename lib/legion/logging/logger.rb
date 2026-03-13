@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'legion/logging/methods'
 require 'legion/logging/builder'
 

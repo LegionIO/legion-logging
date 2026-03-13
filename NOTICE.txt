@@ -1,9 +1,0 @@
-Legion::Logging(legion-logging)
-Copyright 2021 Optum
-
-Project Description:
-====================
-A logging class used by the LegionIO framework
-
-Author(s):
-Esity

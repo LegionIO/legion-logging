@@ -1,7 +1,9 @@
+# frozen_string_literal: true
+
 module Legion
   module Logging
     module Methods
-      def trace(raw_message = nil, size: @trace_size, log_caller: true) # rubocop:disable  Metrics/AbcSize
+      def trace(raw_message = nil, size: @trace_size, log_caller: true)
         return unless @trace_enabled
 
         raw_message = yield if raw_message.nil? && block_given?

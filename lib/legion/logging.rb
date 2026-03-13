@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'legion/logging/version'
 require 'legion/logging/logger'
 require 'legion/logging/methods'
@@ -12,6 +14,7 @@ module Legion
     class << self
       include Legion::Logging::Methods
       include Legion::Logging::Builder
+
       attr_reader :color
 
       def setup(level: 'info', format: :text, **options)

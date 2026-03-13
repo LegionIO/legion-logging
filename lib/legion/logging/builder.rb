@@ -1,12 +1,14 @@
+# frozen_string_literal: true
+
 module Legion
   module Logging
     module Builder
-      def log_format(format: :text, include_pid: false, **options) # rubocop:disable Metrics/AbcSize
+      def log_format(format: :text, include_pid: false, **)
         @format = format.to_sym
         if @format == :json
           json_format(include_pid: include_pid)
         else
-          text_format(include_pid: include_pid, **options)
+          text_format(include_pid: include_pid, **)
         end
       end
 
@@ -18,9 +20,9 @@ module Legion
         log.formatter = proc do |severity, datetime, _progname, msg|
           entry = {
             timestamp: datetime.utc.iso8601(3),
-            level: severity.downcase,
-            message: msg.is_a?(String) ? msg.gsub(/\e\[[0-9;]*m/, '') : msg.to_s,
-            thread: Thread.current.object_id
+            level:     severity.downcase,
+            message:   msg.is_a?(String) ? msg.gsub(/\e\[[0-9;]*m/, '') : msg.to_s,
+            thread:    Thread.current.object_id
           }
           entry[:pid] = ::Process.pid if include_pid
           "#{::JSON.generate(entry)}\n"
@@ -29,15 +31,15 @@ module Legion
         end
       end
 
-      def text_format(include_pid: false, **options) # rubocop:disable Metrics/AbcSize
+      def text_format(include_pid: false, **options)
         log.formatter = proc do |severity, datetime, _progname, msg|
           options[:lex_name] = options.key?(:lex) ? "[#{options[:lex]}]" : nil
           unless options[:lex_name].nil?
             data = caller_locations[4].to_s.split('/').last(2)
             runner_trace = {
-              type: data[0],
-              file: data[1].split('.')[0],
-              function: data[1].split('`')[1].delete_suffix('\''),
+              type:        data[0],
+              file:        data[1].split('.')[0],
+              function:    data[1].split('`')[1].delete_suffix('\''),
               line_number: data[1].split(':')[1]
             }
           end
@@ -45,7 +47,7 @@ module Legion
           string.concat("[#{::Process.pid}]") if include_pid
           string.concat(options[:lex_name]) unless options[:lex_name].nil?
           if runner_trace.is_a?(Hash) && (options[:extended] || severity == 'debug')
-            string.concat("[#{runner_trace[:type]}:#{runner_trace[:file]}:#{runner_trace[:function]}:#{runner_trace[:line_number]}]") # rubocop:disable Layout/LineLength
+            string.concat("[#{runner_trace[:type]}:#{runner_trace[:file]}:#{runner_trace[:function]}:#{runner_trace[:line_number]}]")
           end
           string.concat(" #{severity} #{msg}\n")
           string

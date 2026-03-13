@@ -1,40 +1,38 @@
-Legion::Logging
-=====
+# legion-logging
 
-Legion::Logging is a ruby logging class that is used by the LegionIO framework. It gives all other gems and extensions a
-single logging library to use for consistency. 
+Logging module for the [LegionIO](https://github.com/LegionIO/LegionIO) framework. Provides colorized console output via Rainbow and a consistent logging interface across all Legion gems and extensions.
 
-Supported Ruby versions and implementations
-------------------------------------------------
-
-Legion::Json should work identically on:
-
-* JRuby 9.2+
-* Ruby 2.4+
-
-
-Installation and Usage
-------------------------
-
-You can verify your installation using this piece of code:
+## Installation
 
 ```bash
 gem install legion-logging
 ```
 
+Or add to your Gemfile:
+
 ```ruby
-require 'legion-logging'
-
-Legion::Logging.setup(log_file: './legion.log', level: 'debug')
-Legion::Logging.setup(level: 'info0') # defaults to stdout when no log_file specified
-
-Legion::Logging.warn('warning a user')
-Legion::Logging.info('hello')
-
-
+gem 'legion-logging'
 ```
 
-Authors
-----------
+## Usage
 
-* [Matthew Iverson](https://github.com/Esity) - current maintainer
+```ruby
+require 'legion/logging'
+
+Legion::Logging.setup(log_file: './legion.log', level: 'debug')
+Legion::Logging.setup(level: 'info')  # defaults to stdout when no log_file specified
+
+Legion::Logging.debug('debugging info')
+Legion::Logging.info('hello')
+Legion::Logging.warn('warning a user')
+Legion::Logging.error('something went wrong')
+Legion::Logging.fatal('critical failure')
+```
+
+## Requirements
+
+- Ruby >= 3.4
+
+## License
+
+Apache-2.0
