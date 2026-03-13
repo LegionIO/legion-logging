@@ -9,12 +9,12 @@ module Legion
       include Legion::Logging::Methods
       include Legion::Logging::Builder
 
-      def initialize(level: 'info', log_file: nil, lex: nil, trace: false, extended: false, trace_size: 4, **opts) # rubocop:disable Metrics/ParameterLists
+      def initialize(level: 'info', log_file: nil, lex: nil, trace: false, extended: false, trace_size: 4, format: :text, **opts) # rubocop:disable Metrics/ParameterLists
         set_log(logfile: log_file)
         log_level(level)
-        log_format(lex: lex, extended: extended, **opts)
+        log_format(format: format, lex: lex, extended: extended, **opts)
         @color = opts[:color]
-        @color = true if opts[:color].nil? && log_file.nil?
+        @color = format != :json && (opts[:color] || (opts[:color].nil? && log_file.nil?))
         @trace_enabled = trace
         @trace_size = trace_size
         @extended = extended

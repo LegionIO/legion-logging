@@ -1,7 +1,35 @@
 module Legion
   module Logging
     module Builder
-      def log_format(include_pid: false, **options) # rubocop:disable Metrics/AbcSize
+      def log_format(format: :text, include_pid: false, **options) # rubocop:disable Metrics/AbcSize
+        @format = format.to_sym
+        if @format == :json
+          json_format(include_pid: include_pid)
+        else
+          text_format(include_pid: include_pid, **options)
+        end
+      end
+
+      def json?
+        @format == :json
+      end
+
+      def json_format(include_pid: false)
+        log.formatter = proc do |severity, datetime, _progname, msg|
+          entry = {
+            timestamp: datetime.utc.iso8601(3),
+            level: severity.downcase,
+            message: msg.is_a?(String) ? msg.gsub(/\e\[[0-9;]*m/, '') : msg.to_s,
+            thread: Thread.current.object_id
+          }
+          entry[:pid] = ::Process.pid if include_pid
+          "#{::JSON.generate(entry)}\n"
+        rescue StandardError
+          "{\"timestamp\":\"#{datetime}\",\"level\":\"#{severity}\",\"message\":#{msg.to_s.dump}}\n"
+        end
+      end
+
+      def text_format(include_pid: false, **options) # rubocop:disable Metrics/AbcSize
         log.formatter = proc do |severity, datetime, _progname, msg|
           options[:lex_name] = options.key?(:lex) ? "[#{options[:lex]}]" : nil
           unless options[:lex_name].nil?
