@@ -42,6 +42,7 @@ Legion::Logging (singleton module)
 | `lib/legion/logging/methods.rb` | Log level methods |
 | `lib/legion/logging/builder.rb` | Output config and formatter |
 | `lib/legion/logging/logger.rb` | Core logger setup |
+| `lib/legion/logging/multi_io.rb` | Multi-output IO (write to multiple destinations simultaneously) |
 | `lib/legion/logging/version.rb` | VERSION constant |
 
 ## Role in LegionIO

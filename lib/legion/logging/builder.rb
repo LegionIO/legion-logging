@@ -56,16 +56,31 @@ module Legion
       end
 
       def output(**options)
-        @log = ::Logger.new($stdout) if options[:log_file].nil?
-        @log = ::Logger.new(options[:log_file]) unless options[:log_file].nil?
+        if options[:log_file] && options[:log_stdout] != false
+          require_relative 'multi_io'
+          io = MultiIO.new($stdout, File.open(options[:log_file], 'a'))
+          @log = ::Logger.new(io)
+        elsif options[:log_file]
+          @log = ::Logger.new(options[:log_file])
+        else
+          @log = ::Logger.new($stdout)
+        end
       end
 
       def log
         @log ||= set_log
       end
 
-      def set_log(logfile: nil, **)
-        @log = logfile.nil? ? ::Logger.new($stdout) : ::Logger.new(logfile)
+      def set_log(logfile: nil, log_stdout: nil, **)
+        if logfile && log_stdout != false
+          require_relative 'multi_io'
+          io = MultiIO.new($stdout, File.open(logfile, 'a'))
+          @log = ::Logger.new(io)
+        elsif logfile
+          @log = ::Logger.new(logfile)
+        else
+          @log = ::Logger.new($stdout)
+        end
       end
 
       def level
