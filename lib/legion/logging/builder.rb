@@ -33,7 +33,11 @@ module Legion
 
       def text_format(include_pid: false, **options)
         log.formatter = proc do |severity, datetime, _progname, msg|
-          options[:lex_name] = options.key?(:lex) ? "[#{options[:lex]}]" : nil
+          options[:lex_name] = if options.key?(:lex_segments)
+                                 options[:lex_segments].map { |s| "[#{s}]" }.join
+                               elsif options.key?(:lex) && !options[:lex].nil?
+                                 "[#{options[:lex]}]"
+                               end
           unless options[:lex_name].nil?
             loc  = caller_locations[4]
             path = loc.to_s.split('/').last(2)
