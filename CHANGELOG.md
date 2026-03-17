@@ -1,5 +1,12 @@
 # Legion::Logging Changelog
 
+## v1.2.3
+
+### Changed
+- `Builder#text_format` now accepts `lex_segments:` array and formats it as stacked brackets (e.g. `[agentic][cognitive][anchor]`)
+- Falls back to legacy `lex:` string kwarg for backward compatibility with existing callers
+- `lex: nil` no longer produces a spurious `[]` bracket in log output
+
 ## v1.2.2
 
 ### Added
