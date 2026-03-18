@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'fileutils'
+
 module Legion
   module Logging
     module Builder
@@ -61,11 +63,12 @@ module Legion
 
       def output(**options)
         if options[:log_file] && options[:log_stdout] != false
+          path = prepare_log_path(options[:log_file])
           require_relative 'multi_io'
-          io = MultiIO.new($stdout, File.open(options[:log_file], 'a'))
+          io = MultiIO.new($stdout, File.open(path, 'a'))
           @log = ::Logger.new(io)
         elsif options[:log_file]
-          @log = ::Logger.new(options[:log_file])
+          @log = ::Logger.new(prepare_log_path(options[:log_file]))
         else
           @log = ::Logger.new($stdout)
         end
@@ -77,14 +80,21 @@ module Legion
 
       def set_log(logfile: nil, log_stdout: nil, **)
         if logfile && log_stdout != false
+          path = prepare_log_path(logfile)
           require_relative 'multi_io'
-          io = MultiIO.new($stdout, File.open(logfile, 'a'))
+          io = MultiIO.new($stdout, File.open(path, 'a'))
           @log = ::Logger.new(io)
         elsif logfile
-          @log = ::Logger.new(logfile)
+          @log = ::Logger.new(prepare_log_path(logfile))
         else
           @log = ::Logger.new($stdout)
         end
+      end
+
+      def prepare_log_path(path)
+        expanded = File.expand_path(path)
+        FileUtils.mkdir_p(File.dirname(expanded))
+        expanded
       end
 
       def level
