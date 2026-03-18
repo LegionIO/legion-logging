@@ -1,5 +1,11 @@
 # Legion::Logging Changelog
 
+## v1.2.4
+
+### Fixed
+- Expand `~` in log_file paths with `File.expand_path` (fixes `Errno::ENOENT` for paths like `~/.legionio/logs/legion.log`)
+- Auto-create parent directories for log files with `FileUtils.mkdir_p`
+
 ## v1.2.3
 
 ### Changed
