@@ -8,16 +8,19 @@
 Ruby logging class for the LegionIO framework. Provides colorized console output via Rainbow, structured JSON logging (`format: :json`), and a consistent logging interface across all Legion gems and extensions.
 
 **GitHub**: https://github.com/LegionIO/legion-logging
+**Version**: 1.2.5
 **License**: Apache-2.0
 
 ## Architecture
 
 ```
 Legion::Logging (singleton module)
-├── Methods    # Log level methods: debug, info, warn, error, fatal, unknown
-├── Builder    # Output destination (stdout/file), log level, formatter
-├── Logger     # Core logger configuration and setup
-└── Version    # VERSION constant
+├── Methods         # Log level methods: debug, info, warn, error, fatal, unknown
+├── Builder         # Output destination (stdout/file), log level, formatter
+├── Logger          # Core logger configuration and setup
+├── MultiIO         # Write to multiple destinations simultaneously
+├── SIEMExporter    # PHI-redacting SIEM export (Splunk HEC, ELK/OpenSearch)
+└── Version         # VERSION constant (1.2.5)
 ```
 
 ### Key Design Patterns
@@ -27,6 +30,8 @@ Legion::Logging (singleton module)
 - **Setup Method**: `Legion::Logging.setup(log_file:, level:)` configures output destination and level
 - **Structured JSON**: `format: :json` in settings outputs machine-parseable JSON log lines
 - **Shared Interface**: Same method signature (`info`, `warn`, `error`, etc.) across all Legion components
+- **MultiIO**: Splits writes to stdout and a log file simultaneously (used by Builder when `log_file` is set)
+- **SIEMExporter**: PHI redaction (SSN, phone, MRN, DOB patterns), `export_to_splunk` (HEC), `format_for_elk`
 
 ## Dependencies
 
@@ -43,6 +48,7 @@ Legion::Logging (singleton module)
 | `lib/legion/logging/builder.rb` | Output config and formatter |
 | `lib/legion/logging/logger.rb` | Core logger setup |
 | `lib/legion/logging/multi_io.rb` | Multi-output IO (write to multiple destinations simultaneously) |
+| `lib/legion/logging/siem_exporter.rb` | PHI-redacting SIEM export helpers (Splunk HEC, ELK format) |
 | `lib/legion/logging/version.rb` | VERSION constant |
 
 ## Role in LegionIO
