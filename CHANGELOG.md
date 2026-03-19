@@ -1,5 +1,10 @@
 # Legion::Logging Changelog
 
+## v1.2.5
+
+### Fixed
+- Added `logger` gem as runtime dependency for Ruby 4.0 compatibility (removed from default gems)
+
 ## v1.2.4
 
 ### Fixed

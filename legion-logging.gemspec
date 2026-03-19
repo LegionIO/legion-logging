@@ -26,5 +26,6 @@ Gem::Specification.new do |spec|
     'rubygems_mfa_required' => 'true'
   }
 
+  spec.add_dependency 'logger'
   spec.add_dependency 'rainbow', '~> 3'
 end
