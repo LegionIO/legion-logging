@@ -1,5 +1,17 @@
 # Legion::Logging Changelog
 
+## v1.2.6
+
+### Added
+- `Legion::Logging::Redactor`: PII/PHI redaction module with built-in patterns for SSN, email, phone, MRN, DOB, and credit card numbers
+- Sensitive field-name redaction: fields named `password`, `secret`, `token`, `api_key`, `authorization` are always fully redacted
+- Recursive redaction of nested hashes and arrays
+- Custom pattern support via `Legion::Settings[:logging, :redactor, :custom_patterns]`
+- `Legion::Logging::Shipper`: structured log event forwarding to external collectors with batch buffering and level filtering
+- `Legion::Logging::Shipper::FileTransport`: writes JSON-lines to rotated log files for pickup by Filebeat/Fluentd
+- `Legion::Logging::Shipper::HttpTransport`: POSTs JSON batches to HTTP endpoints (Splunk HEC, ELK Logstash)
+- All SIEM shipping features disabled by default; opt-in via `logging.shipper.enabled: true`
+
 ## v1.2.5
 
 ### Fixed
