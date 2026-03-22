@@ -132,6 +132,19 @@ RSpec.describe Legion::Logging::AsyncWriter do
   end
 end
 
+RSpec.describe 'Legion::Logging::Logger instance async' do
+  it 'supports async: true in constructor' do
+    logger = Legion::Logging::Logger.new(level: 'info', async: true)
+    expect(logger.async?).to be true
+    logger.stop_async_writer
+  end
+
+  it 'defaults to sync when async not specified' do
+    logger = Legion::Logging::Logger.new(level: 'info')
+    expect(logger.async?).to be false
+  end
+end
+
 RSpec.describe 'async routing through Methods' do
   before do
     Legion::Logging.setup(level: 'debug', async: true)
