@@ -62,16 +62,15 @@ RSpec.describe Legion::Logging::AsyncWriter do
     subject { described_class.new(logger, buffer_size: 2) }
 
     it 'blocks the caller when the queue is full' do
-      queue = subject.instance_variable_get(:@queue)
-      2.times { |i| queue.push(Legion::Logging::AsyncWriter::LogEntry.new(level: :info, message: "fill-#{i}", hook_context: nil)) }
+      2.times { |i| subject.push(Legion::Logging::AsyncWriter::LogEntry.new(level: :info, message: "fill-#{i}", hook_context: nil)) }
 
       blocked = true
       pusher = Thread.new do
-        queue.push(Legion::Logging::AsyncWriter::LogEntry.new(level: :info, message: 'overflow', hook_context: nil))
+        subject.push(Legion::Logging::AsyncWriter::LogEntry.new(level: :info, message: 'overflow', hook_context: nil))
         blocked = false
       end
 
-      sleep 0.1
+      sleep 0.05 until pusher.status == 'sleep'
       expect(blocked).to be true
       pusher.kill
     end
@@ -108,8 +107,13 @@ RSpec.describe Legion::Logging::AsyncWriter do
 
     it 'fires hooks on the writer thread' do
       fired_events = []
-      Legion::Logging::Hooks.register(:error) { |event| fired_events << event }
+      hook_thread = nil
+      Legion::Logging::Hooks.register(:error) do |event|
+        fired_events << event
+        hook_thread = Thread.current
+      end
 
+      writer_thread = subject.instance_variable_get(:@thread)
       event = { level: :error, message: 'hook test' }
       entry = Legion::Logging::AsyncWriter::LogEntry.new(
         level: :error, message: 'hook test', hook_context: { level: :error, event: event }
@@ -119,6 +123,8 @@ RSpec.describe Legion::Logging::AsyncWriter do
 
       expect(fired_events.size).to eq(1)
       expect(fired_events.first[:message]).to eq('hook test')
+      expect(hook_thread).to eq(writer_thread)
+      expect(hook_thread).not_to eq(Thread.current)
     end
   end
 

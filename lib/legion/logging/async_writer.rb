@@ -24,7 +24,11 @@ module Legion
       def stop(timeout: 2)
         return unless @thread&.alive?
 
-        @queue.push(SHUTDOWN)
+        begin
+          @queue.push(SHUTDOWN, true)
+        rescue ThreadError
+          # Queue full — fall through to join/kill + drain
+        end
         @thread.join(timeout)
         @thread.kill if @thread&.alive?
         drain

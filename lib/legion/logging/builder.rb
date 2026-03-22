@@ -139,8 +139,10 @@ module Legion
       end
 
       def stop_async_writer
-        @async_writer&.stop
+        writer = @async_writer
+        @async_writer = nil
         @async = false
+        writer&.stop
       end
     end
   end
