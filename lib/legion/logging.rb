@@ -4,6 +4,7 @@ require 'legion/logging/version'
 require 'legion/logging/logger'
 require 'legion/logging/methods'
 require 'legion/logging/builder'
+require 'legion/logging/hooks'
 
 require 'json'
 require 'logger'
@@ -14,6 +15,13 @@ module Legion
     class << self
       include Legion::Logging::Methods
       include Legion::Logging::Builder
+
+      def on_fatal(&)  = Hooks.register(:fatal, &)
+      def on_error(&)  = Hooks.register(:error, &)
+      def on_warn(&)   = Hooks.register(:warn, &)
+      def enable_hooks!     = Hooks.enable!
+      def disable_hooks!    = Hooks.disable!
+      def clear_hooks!      = Hooks.clear!
 
       attr_reader :color
 
