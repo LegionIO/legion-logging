@@ -15,6 +15,7 @@ module Legion
       def start
         return if @thread&.alive?
 
+        drain
         @thread = Thread.new { consume }
         @thread.name = 'legion-log-writer'
         @thread.abort_on_exception = false
@@ -52,7 +53,7 @@ module Legion
         @logger.send(entry.level, entry.message)
         fire_hooks(entry) if entry.hook_context
       rescue StandardError => e
-        warn("legion-log-writer error: #{e.message}")
+        warn("legion-log-writer error: #{e.message} (#{e.backtrace&.first})")
       end
 
       def drain
@@ -67,8 +68,8 @@ module Legion
       def fire_hooks(entry)
         ctx = entry.hook_context
         Legion::Logging::Hooks.fire(ctx[:level], ctx[:event])
-      rescue StandardError
-        nil
+      rescue StandardError => e
+        warn("legion-log-writer hook error: #{e.message}")
       end
     end
   end
