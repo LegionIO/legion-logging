@@ -1,5 +1,16 @@
 # Legion::Logging Changelog
 
+## [Unreleased]
+
+## v1.2.7
+
+### Added
+- `Legion::Logging::Hooks`: callback registry for fatal/error/warn log events
+- `Legion::Logging::EventBuilder`: structured event payload builder with caller, exception, lex, and gem metadata
+- `on_fatal`, `on_error`, `on_warn` registration methods on `Legion::Logging`
+- `enable_hooks!`, `disable_hooks!`, `clear_hooks!` control methods
+- Hook dispatch wired into `fatal`, `error`, `warn` methods in `Methods` module
+
 ## v1.2.6
 
 ### Added
