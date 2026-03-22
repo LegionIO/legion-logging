@@ -131,3 +131,37 @@ RSpec.describe Legion::Logging::AsyncWriter do
     end
   end
 end
+
+RSpec.describe 'async routing through Methods' do
+  before do
+    Legion::Logging.setup(level: 'debug', async: true)
+  end
+
+  after do
+    Legion::Logging.stop_async_writer
+  end
+
+  it 'routes info through the async writer' do
+    writer = Legion::Logging.instance_variable_get(:@async_writer)
+    expect(writer).to receive(:push).once
+    Legion::Logging.info('async info')
+  end
+
+  it 'routes warn through the async writer with hook context' do
+    writer = Legion::Logging.instance_variable_get(:@async_writer)
+    expect(writer).to receive(:push).once
+    Legion::Logging.warn('async warn')
+  end
+
+  it 'does NOT route fatal through async writer' do
+    writer = Legion::Logging.instance_variable_get(:@async_writer)
+    expect(writer).not_to receive(:push)
+    Legion::Logging.fatal('sync fatal')
+  end
+
+  it 'falls back to sync when async is disabled' do
+    Legion::Logging.stop_async_writer
+    expect(Legion::Logging.log).to receive(:debug).with(anything)
+    Legion::Logging.debug('sync fallback')
+  end
+end
