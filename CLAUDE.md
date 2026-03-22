@@ -17,10 +17,14 @@ Ruby logging class for the LegionIO framework. Provides colorized console output
 Legion::Logging (singleton module)
 ├── Methods         # Log level methods: debug, info, warn, error, fatal, unknown
 ├── Builder         # Output destination (stdout/file), log level, formatter
+├── Hooks           # Callback registry for fatal/error/warn events (on_fatal, on_error, on_warn)
+├── EventBuilder    # Structured event payload builder (caller, exception, lex, gem metadata)
 ├── Logger          # Core logger configuration and setup
 ├── MultiIO         # Write to multiple destinations simultaneously
 ├── SIEMExporter    # PHI-redacting SIEM export (Splunk HEC, ELK/OpenSearch)
-└── Version         # VERSION constant (1.2.5)
+├── Shipper         # Buffered log event forwarding (file/http transports)
+├── Redactor        # PII/PHI pattern redaction
+└── Version         # VERSION constant
 ```
 
 ### Key Design Patterns
@@ -32,6 +36,8 @@ Legion::Logging (singleton module)
 - **Shared Interface**: Same method signature (`info`, `warn`, `error`, etc.) across all Legion components
 - **MultiIO**: Splits writes to stdout and a log file simultaneously (used by Builder when `log_file` is set)
 - **SIEMExporter**: PHI redaction (SSN, phone, MRN, DOB patterns), `export_to_splunk` (HEC), `format_for_elk`
+- **Hook Callbacks**: `on_fatal`, `on_error`, `on_warn` register procs called after each log at those levels. Hooks are gated by `enable_hooks!`/`disable_hooks!`. Hook failures are silently rescued — never impact the logger.
+- **EventBuilder**: Builds structured event hashes from log context (caller location, exception info, lex identity, gem metadata). All from in-memory data, zero IO.
 
 ## Dependencies
 
@@ -49,6 +55,8 @@ Legion::Logging (singleton module)
 | `lib/legion/logging/logger.rb` | Core logger setup |
 | `lib/legion/logging/multi_io.rb` | Multi-output IO (write to multiple destinations simultaneously) |
 | `lib/legion/logging/siem_exporter.rb` | PHI-redacting SIEM export helpers (Splunk HEC, ELK format) |
+| `lib/legion/logging/hooks.rb` | Callback registry (fatal/error/warn hook arrays, enable/disable/clear) |
+| `lib/legion/logging/event_builder.rb` | Structured event payload builder |
 | `lib/legion/logging/version.rb` | VERSION constant |
 
 ## Role in LegionIO
