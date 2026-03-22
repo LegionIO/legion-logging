@@ -64,13 +64,13 @@ module Legion
           def auth_token
             return nil unless defined?(Legion::Settings)
 
-            Legion::Settings[:logging, :shipper, :auth_token]
+            Legion::Settings.dig(:logging, :shipper, :auth_token)
           end
 
           def resolve_endpoint
             return nil unless defined?(Legion::Settings)
 
-            Legion::Settings[:logging, :shipper, :endpoint]
+            Legion::Settings.dig(:logging, :shipper, :endpoint)
           end
         end
       end

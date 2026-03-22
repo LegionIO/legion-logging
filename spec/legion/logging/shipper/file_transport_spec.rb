@@ -11,7 +11,7 @@ RSpec.describe Legion::Logging::Shipper::FileTransport do
         path = File.join(dir, 'siem.log')
         stub_const('Legion::Settings', Module.new)
         allow(Legion::Settings).to receive(:[]).and_return(nil)
-        allow(Legion::Settings).to receive(:[]).with(:logging, :shipper, :file, :path).and_return(path)
+        allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :file, :path).and_return(path)
 
         event = { level: 'error', message: 'test event' }
         result = described_class.ship(event)
@@ -30,7 +30,7 @@ RSpec.describe Legion::Logging::Shipper::FileTransport do
         path = File.join(dir, 'nested', 'dirs', 'siem.log')
         stub_const('Legion::Settings', Module.new)
         allow(Legion::Settings).to receive(:[]).and_return(nil)
-        allow(Legion::Settings).to receive(:[]).with(:logging, :shipper, :file, :path).and_return(path)
+        allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :file, :path).and_return(path)
 
         described_class.ship({ level: 'warn', message: 'hello' })
         expect(File.exist?(path)).to be(true)
@@ -42,7 +42,7 @@ RSpec.describe Legion::Logging::Shipper::FileTransport do
         path = File.join(dir, 'siem.log')
         stub_const('Legion::Settings', Module.new)
         allow(Legion::Settings).to receive(:[]).and_return(nil)
-        allow(Legion::Settings).to receive(:[]).with(:logging, :shipper, :file, :path).and_return(path)
+        allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :file, :path).and_return(path)
 
         described_class.ship({ level: 'error', message: 'first' })
         described_class.ship({ level: 'error', message: 'second' })
@@ -55,8 +55,8 @@ RSpec.describe Legion::Logging::Shipper::FileTransport do
     it 'returns false and does not raise on write error' do
       stub_const('Legion::Settings', Module.new)
       allow(Legion::Settings).to receive(:[]).and_return(nil)
-      allow(Legion::Settings).to receive(:[]).with(:logging, :shipper, :file, :path)
-                                             .and_return('/nonexistent_root_dir/siem.log')
+      allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :file, :path)
+                                              .and_return('/nonexistent_root_dir/siem.log')
       allow(FileUtils).to receive(:mkdir_p).and_raise(Errno::EACCES, 'permission denied')
 
       expect(described_class.ship({ level: 'error', message: 'test' })).to be(false)

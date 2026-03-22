@@ -35,7 +35,7 @@ module Legion
         @color = format != :json && (options[:color] || (options[:color].nil? && options[:log_file].nil?))
         if async
           buffer = if defined?(Legion::Settings)
-                     Legion::Settings[:logging, :async, :buffer_size] || 10_000
+                     Legion::Settings.dig(:logging, :async, :buffer_size) || 10_000
                    else
                      10_000
                    end

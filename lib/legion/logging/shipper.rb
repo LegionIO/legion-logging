@@ -64,7 +64,7 @@ module Legion
         def enabled?
           return false unless defined?(Legion::Settings)
 
-          Legion::Settings[:logging, :shipper, :enabled] == true
+          Legion::Settings.dig(:logging, :shipper, :enabled) == true
         end
 
         private
@@ -103,26 +103,26 @@ module Legion
         def transport_type
           return :file unless defined?(Legion::Settings)
 
-          key = Legion::Settings[:logging, :shipper, :transport]
+          key = Legion::Settings.dig(:logging, :shipper, :transport)
           key ? key.to_sym : :file
         end
 
         def batch_size
           return 100 unless defined?(Legion::Settings)
 
-          Legion::Settings[:logging, :shipper, :batch_size] || 100
+          Legion::Settings.dig(:logging, :shipper, :batch_size) || 100
         end
 
         def flush_interval
           return 5 unless defined?(Legion::Settings)
 
-          Legion::Settings[:logging, :shipper, :flush_interval] || 5
+          Legion::Settings.dig(:logging, :shipper, :flush_interval) || 5
         end
 
         def minimum_level
           return 'warn' unless defined?(Legion::Settings)
 
-          levels = Legion::Settings[:logging, :shipper, :levels]
+          levels = Legion::Settings.dig(:logging, :shipper, :levels)
           return 'warn' unless levels.is_a?(Array) && !levels.empty?
 
           levels.min_by { |l| LEVEL_ORDER.index(l.to_s) || 99 }.to_s

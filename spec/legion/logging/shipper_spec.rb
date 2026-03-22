@@ -19,14 +19,14 @@ RSpec.describe Legion::Logging::Shipper do
     it 'returns false when settings say disabled' do
       stub_const('Legion::Settings', Module.new)
       allow(Legion::Settings).to receive(:[]).and_return(nil)
-      allow(Legion::Settings).to receive(:[]).with(:logging, :shipper, :enabled).and_return(false)
+      allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :enabled).and_return(false)
       expect(described_class.enabled?).to be(false)
     end
 
     it 'returns true when settings say enabled' do
       stub_const('Legion::Settings', Module.new)
       allow(Legion::Settings).to receive(:[]).and_return(nil)
-      allow(Legion::Settings).to receive(:[]).with(:logging, :shipper, :enabled).and_return(true)
+      allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :enabled).and_return(true)
       expect(described_class.enabled?).to be(true)
     end
   end
@@ -35,15 +35,15 @@ RSpec.describe Legion::Logging::Shipper do
     before do
       stub_const('Legion::Settings', Module.new)
       allow(Legion::Settings).to receive(:[]).and_return(nil)
-      allow(Legion::Settings).to receive(:[]).with(:logging, :shipper, :enabled).and_return(true)
-      allow(Legion::Settings).to receive(:[]).with(:logging, :shipper, :transport).and_return('file')
-      allow(Legion::Settings).to receive(:[]).with(:logging, :shipper, :levels).and_return(%w[warn error fatal])
-      allow(Legion::Settings).to receive(:[]).with(:logging, :shipper, :batch_size).and_return(100)
-      allow(Legion::Settings).to receive(:[]).with(:logging, :redactor, :custom_patterns).and_return(nil)
+      allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :enabled).and_return(true)
+      allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :transport).and_return('file')
+      allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :levels).and_return(%w[warn error fatal])
+      allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :batch_size).and_return(100)
+      allow(Legion::Settings).to receive(:dig).with(:logging, :redactor, :custom_patterns).and_return(nil)
     end
 
     it 'does nothing when disabled' do
-      allow(Legion::Settings).to receive(:[]).with(:logging, :shipper, :enabled).and_return(false)
+      allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :enabled).and_return(false)
       expect(described_class).not_to receive(:buffer_event)
       described_class.ship({ level: 'error', message: 'test' })
     end
@@ -70,8 +70,8 @@ RSpec.describe Legion::Logging::Shipper do
     before do
       stub_const('Legion::Settings', Module.new)
       allow(Legion::Settings).to receive(:[]).and_return(nil)
-      allow(Legion::Settings).to receive(:[]).with(:logging, :shipper, :transport).and_return('file')
-      allow(Legion::Settings).to receive(:[]).with(:logging, :shipper, :batch_size).and_return(100)
+      allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :transport).and_return('file')
+      allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :batch_size).and_return(100)
     end
 
     it 'does nothing when buffer is nil' do
@@ -107,10 +107,10 @@ RSpec.describe Legion::Logging::Shipper do
     before do
       stub_const('Legion::Settings', Module.new)
       allow(Legion::Settings).to receive(:[]).and_return(nil)
-      allow(Legion::Settings).to receive(:[]).with(:logging, :shipper, :enabled).and_return(true)
-      allow(Legion::Settings).to receive(:[]).with(:logging, :shipper, :transport).and_return('file')
-      allow(Legion::Settings).to receive(:[]).with(:logging, :shipper, :batch_size).and_return(100)
-      allow(Legion::Settings).to receive(:[]).with(:logging, :redactor, :custom_patterns).and_return(nil)
+      allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :enabled).and_return(true)
+      allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :transport).and_return('file')
+      allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :batch_size).and_return(100)
+      allow(Legion::Settings).to receive(:dig).with(:logging, :redactor, :custom_patterns).and_return(nil)
     end
 
     {
@@ -122,7 +122,7 @@ RSpec.describe Legion::Logging::Shipper do
     }.each do |min_level, shippable|
       context "when minimum level is #{min_level}" do
         before do
-          allow(Legion::Settings).to receive(:[]).with(:logging, :shipper, :levels).and_return([min_level])
+          allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :levels).and_return([min_level])
         end
 
         shippable.each do |level|
@@ -148,14 +148,14 @@ RSpec.describe Legion::Logging::Shipper do
     before do
       stub_const('Legion::Settings', Module.new)
       allow(Legion::Settings).to receive(:[]).and_return(nil)
-      allow(Legion::Settings).to receive(:[]).with(:logging, :shipper, :enabled).and_return(true)
-      allow(Legion::Settings).to receive(:[]).with(:logging, :shipper, :levels).and_return(['debug'])
-      allow(Legion::Settings).to receive(:[]).with(:logging, :shipper, :batch_size).and_return(1)
-      allow(Legion::Settings).to receive(:[]).with(:logging, :redactor, :custom_patterns).and_return(nil)
+      allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :enabled).and_return(true)
+      allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :levels).and_return(['debug'])
+      allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :batch_size).and_return(1)
+      allow(Legion::Settings).to receive(:dig).with(:logging, :redactor, :custom_patterns).and_return(nil)
     end
 
     it 'uses file transport when configured' do
-      allow(Legion::Settings).to receive(:[]).with(:logging, :shipper, :transport).and_return('file')
+      allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :transport).and_return('file')
       allow(Legion::Logging::Shipper::FileTransport).to receive(:ship).and_return(true)
       described_class.instance_variable_set(:@mutex, Mutex.new)
       described_class.instance_variable_set(:@buffer, [])
@@ -164,7 +164,7 @@ RSpec.describe Legion::Logging::Shipper do
     end
 
     it 'uses http transport when configured' do
-      allow(Legion::Settings).to receive(:[]).with(:logging, :shipper, :transport).and_return('http')
+      allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :transport).and_return('http')
       allow(Legion::Logging::Shipper::HttpTransport).to receive(:ship).and_return(true)
       described_class.instance_variable_set(:@mutex, Mutex.new)
       described_class.instance_variable_set(:@buffer, [])

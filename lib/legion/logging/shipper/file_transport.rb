@@ -33,7 +33,7 @@ module Legion
           def settings_path
             return nil unless defined?(Legion::Settings)
 
-            Legion::Settings[:logging, :shipper, :file, :path]
+            Legion::Settings.dig(:logging, :shipper, :file, :path)
           end
         end
       end

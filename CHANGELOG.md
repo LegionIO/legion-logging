@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-03-22
+
+### Fixed
+- Replace `Legion::Settings[:logging, :shipper, ...]` multi-arg bracket calls with `Legion::Settings.dig(...)` — `Settings#[]` only accepts 1 argument, causing `ArgumentError: wrong number of arguments (given 3, expected 1)` on boot
+- Affected: `logging.rb` (async buffer_size), `shipper.rb` (5 calls), `redactor.rb`, `file_transport.rb`, `http_transport.rb` (2 calls)
+
 ## [1.3.0] - 2026-03-22
 
 ### Added

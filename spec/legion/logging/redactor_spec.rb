@@ -133,8 +133,8 @@ RSpec.describe Legion::Logging::Redactor do
     it 'applies custom patterns from Legion::Settings when available' do
       stub_const('Legion::Settings', Module.new)
       allow(Legion::Settings).to receive(:[]).and_return(nil)
-      allow(Legion::Settings).to receive(:[]).with(:logging, :redactor, :custom_patterns)
-                                             .and_return({ 'member_id' => '\bU\d{9}\b' })
+      allow(Legion::Settings).to receive(:dig).with(:logging, :redactor, :custom_patterns)
+                                              .and_return({ 'member_id' => '\bU\d{9}\b' })
 
       result = described_class.redact_string('member U123456789 enrolled')
       expect(result).to include('[REDACTED]')
@@ -144,8 +144,8 @@ RSpec.describe Legion::Logging::Redactor do
     it 'skips invalid regex patterns gracefully' do
       stub_const('Legion::Settings', Module.new)
       allow(Legion::Settings).to receive(:[]).and_return(nil)
-      allow(Legion::Settings).to receive(:[]).with(:logging, :redactor, :custom_patterns)
-                                             .and_return({ 'bad' => '[invalid(' })
+      allow(Legion::Settings).to receive(:dig).with(:logging, :redactor, :custom_patterns)
+                                              .and_return({ 'bad' => '[invalid(' })
 
       expect { described_class.redact_string('hello') }.not_to raise_error
     end

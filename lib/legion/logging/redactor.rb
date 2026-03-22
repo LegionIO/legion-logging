@@ -60,7 +60,7 @@ module Legion
         def custom_patterns
           return {} unless defined?(Legion::Settings)
 
-          raw = Legion::Settings[:logging, :redactor, :custom_patterns]
+          raw = Legion::Settings.dig(:logging, :redactor, :custom_patterns)
           return {} unless raw.is_a?(Hash)
 
           raw.each_with_object({}) do |(name, pattern_str), acc|
