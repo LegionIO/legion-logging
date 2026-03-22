@@ -9,7 +9,7 @@
 - Async mode enabled by default on `setup(async: true)` — log calls return immediately
 - Configurable buffer size via `Legion::Settings[:logging, :async, :buffer_size]` (default: 10,000)
 - Back-pressure: callers block when buffer is full (preserves log completeness)
-- `fatal` calls always bypass the async queue (sync write + flush)
+- `fatal` calls always bypass the async queue (synchronous write)
 - `async?`, `start_async_writer`, `stop_async_writer` methods on both singleton and Logger instances
 - Hook callbacks (`on_error`, `on_warn`) fire on the writer thread; event context captured on caller thread
 

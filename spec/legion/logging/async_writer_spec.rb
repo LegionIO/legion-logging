@@ -70,9 +70,11 @@ RSpec.describe Legion::Logging::AsyncWriter do
         blocked = false
       end
 
-      sleep 0.05 until pusher.status == 'sleep'
+      deadline = Time.now + 2
+      sleep 0.05 until pusher.status == 'sleep' || Time.now > deadline
       expect(blocked).to be true
       pusher.kill
+      pusher.join(1)
     end
   end
 
