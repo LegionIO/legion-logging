@@ -2,7 +2,7 @@
 
 Logging module for the [LegionIO](https://github.com/LegionIO/LegionIO) framework. Provides colorized console output via Rainbow, structured JSON logging, multi-output IO, and a consistent logging interface across all Legion gems and extensions.
 
-**Version**: 1.2.5
+**Version**: 1.3.0
 
 ## Installation
 
@@ -30,6 +30,23 @@ Legion::Logging.warn('warning a user')
 Legion::Logging.error('something went wrong')
 Legion::Logging.fatal('critical failure')
 ```
+
+### Async Logging
+
+By default, `setup` enables async logging — log calls push to a background writer thread and return immediately. Fatal calls always bypass the queue and write synchronously.
+
+```ruby
+# Async is on by default
+Legion::Logging.setup(level: 'info')
+
+# Disable async (synchronous mode)
+Legion::Logging.setup(level: 'info', async: false)
+
+# Configure buffer size via Legion::Settings
+# Legion::Settings[:logging, :async, :buffer_size] = 20_000
+```
+
+When the buffer is full, callers block until the writer drains — this preserves log completeness. Use `Legion::Logging.stop_async_writer` during shutdown to flush and stop the writer thread.
 
 ### Structured JSON Output
 

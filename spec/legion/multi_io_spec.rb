@@ -51,22 +51,22 @@ RSpec.describe 'dual output logging' do
   after { FileUtils.rm_rf(tmpdir) }
 
   it 'writes to both stdout and file via setup' do
-    Legion::Logging.setup(level: 'info', log_file: log_file)
+    Legion::Logging.setup(level: 'info', log_file: log_file, async: false)
 
     expect { Legion::Logging.info('dual test') }.to output(/dual test/).to_stdout_from_any_process
     expect(File.read(log_file)).to include('dual test')
 
     # Reset to stdout-only for other specs
-    Legion::Logging.setup(level: 'debug')
+    Legion::Logging.setup(level: 'debug', async: false)
   end
 
   it 'writes to file only when log_stdout is false' do
-    Legion::Logging.setup(level: 'info', log_file: log_file, log_stdout: false)
+    Legion::Logging.setup(level: 'info', log_file: log_file, log_stdout: false, async: false)
 
     expect { Legion::Logging.info('file only') }.not_to output(/file only/).to_stdout_from_any_process
     expect(File.read(log_file)).to include('file only')
 
-    Legion::Logging.setup(level: 'debug')
+    Legion::Logging.setup(level: 'debug', async: false)
   end
 
   it 'works with Logger instances' do

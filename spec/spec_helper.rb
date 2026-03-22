@@ -24,4 +24,8 @@ RSpec.configure do |config|
   config.expect_with :rspec do |c|
     c.syntax = :expect
   end
+
+  config.after(:each) do
+    Legion::Logging.stop_async_writer if Legion::Logging.respond_to?(:async?) && Legion::Logging.async?
+  end
 end
