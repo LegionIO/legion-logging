@@ -27,4 +27,23 @@ RSpec.describe Legion::Logging::Builder do
       expect { logger.info('hello') }.not_to output(/\[[a-z].*?\].*?hello/).to_stdout_from_any_process
     end
   end
+
+  describe 'async writer integration' do
+    after { Legion::Logging.stop_async_writer if Legion::Logging.async? }
+
+    it 'does not start async writer on setup with async: false' do
+      Legion::Logging.setup(level: 'info', async: false)
+      expect(Legion::Logging.async?).to be false
+    end
+
+    it 'starts async writer when async: true' do
+      Legion::Logging.setup(level: 'info', async: true)
+      expect(Legion::Logging.async?).to be true
+    end
+
+    it 'defaults async to true' do
+      Legion::Logging.setup(level: 'info')
+      expect(Legion::Logging.async?).to be true
+    end
+  end
 end

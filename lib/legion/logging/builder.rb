@@ -125,6 +125,23 @@ module Legion
                     end
         @log = log
       end
+
+      def async?
+        (@async == true && @async_writer&.alive?) || false
+      end
+
+      def start_async_writer(buffer_size: 10_000)
+        require_relative 'async_writer'
+        stop_async_writer if @async_writer&.alive?
+        @async_writer = AsyncWriter.new(log, buffer_size: buffer_size)
+        @async_writer.start
+        @async = true
+      end
+
+      def stop_async_writer
+        @async_writer&.stop
+        @async = false
+      end
     end
   end
 end
