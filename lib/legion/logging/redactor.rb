@@ -65,8 +65,8 @@ module Legion
 
           raw.each_with_object({}) do |(name, pattern_str), acc|
             acc[name] = Regexp.new(pattern_str)
-          rescue RegexpError
-            # skip invalid patterns
+          rescue RegexpError => e
+            warn("Legion::Logging::Redactor#custom_patterns skipping invalid pattern #{name}: #{e.message}")
           end
         end
 

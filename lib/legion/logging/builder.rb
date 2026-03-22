@@ -28,7 +28,8 @@ module Legion
           }
           entry[:pid] = ::Process.pid if include_pid
           "#{::JSON.generate(entry)}\n"
-        rescue StandardError
+        rescue StandardError => e
+          warn("Legion::Logging::Builder#json_format formatter failed: #{e.message}")
           "{\"timestamp\":\"#{datetime}\",\"level\":\"#{severity}\",\"message\":#{msg.to_s.dump}}\n"
         end
       end

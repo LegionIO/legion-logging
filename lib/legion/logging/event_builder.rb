@@ -40,7 +40,8 @@ module Legion
 
           name = begin
             Legion::Settings[:client][:name]
-          rescue StandardError
+          rescue StandardError => e
+            warn("Legion::Logging::EventBuilder#add_node failed: #{e.message}")
             nil
           end
           event[:node] = name if name
@@ -78,7 +79,8 @@ module Legion
             homepage:        spec.metadata['homepage_uri'] || spec.homepage,
             path:            spec.full_gem_path
           }.compact
-        rescue Gem::MissingSpecError, ArgumentError
+        rescue Gem::MissingSpecError, ArgumentError => e
+          warn("Legion::Logging::EventBuilder#add_gem_info failed for #{lex_source}: #{e.message}")
           nil
         end
 

@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [1.2.8] - 2026-03-22
+
+### Changed
+- Added `warn` output to all silent rescue blocks in builder.rb, event_builder.rb, hooks.rb, redactor.rb, and siem_exporter.rb
+
 ## v1.2.7
 
 ### Added

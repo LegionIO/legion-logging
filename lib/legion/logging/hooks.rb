@@ -35,7 +35,8 @@ module Legion
 
           @hooks[level].each do |hook|
             hook.call(event)
-          rescue StandardError
+          rescue StandardError => e
+            warn("Legion::Logging::Hooks#fire hook failed at level=#{level}: #{e.message}")
             nil
           end
         end

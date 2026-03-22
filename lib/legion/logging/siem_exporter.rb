@@ -32,6 +32,7 @@ module Legion
             http.request(req)
           end
         rescue StandardError => e
+          warn("Legion::Logging::SIEMExporter#export_to_splunk failed: #{e.message}")
           { error: e.message }
         end
 
