@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-03-22
+
+### Added
+- `Legion::Logging::AsyncWriter`: non-blocking log writer using `SizedQueue` and a dedicated background thread
+- Async mode enabled by default on `setup(async: true)` — log calls return immediately
+- Configurable buffer size via `Legion::Settings[:logging, :async, :buffer_size]` (default: 10,000)
+- Back-pressure: callers block when buffer is full (preserves log completeness)
+- `fatal` calls always bypass the async queue (sync write + flush)
+- `async?`, `start_async_writer`, `stop_async_writer` methods on both singleton and Logger instances
+- Hook callbacks (`on_error`, `on_warn`) fire on the writer thread; event context captured on caller thread
+
+### Changed
+- `setup` method now accepts `async:` keyword (default: `true`)
+- `Logger.new` now accepts `async:` keyword (default: `false` for backward compatibility)
+
 ## [1.2.8] - 2026-03-22
 
 ### Changed
