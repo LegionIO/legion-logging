@@ -37,24 +37,30 @@ module Legion
         return unless log.level < 3
 
         message = yield if message.nil? && block_given?
+        raw = message
         message = Rainbow(message).yellow if @color
         log.warn(message)
+        fire_hooks(:warn, raw)
       end
 
       def error(message = nil)
         return unless log.level < 4
 
         message = yield if message.nil? && block_given?
+        raw = message
         message = Rainbow(message).red if @color
         log.error(message)
+        fire_hooks(:error, raw)
       end
 
       def fatal(message = nil)
         return unless log.level < 5
 
         message = yield if message.nil? && block_given?
+        raw = message
         message = Rainbow(message).darkred if @color
         log.fatal(message)
+        fire_hooks(:fatal, raw)
       end
 
       def unknown(message = nil)
@@ -76,6 +82,25 @@ module Legion
         else
           Thread.current.object_id.to_s
         end
+      end
+
+      private
+
+      def fire_hooks(level, message)
+        return unless Legion::Logging::Hooks.enabled?
+        return if Legion::Logging::Hooks.hooks[level].empty?
+
+        lex_val  = instance_variable_defined?(:@lex) ? @lex : nil
+        lex_segs = instance_variable_defined?(:@lex_segments) ? @lex_segments : nil
+
+        event = Legion::Logging::EventBuilder.build(
+          level:         level,
+          message:       message,
+          lex:           lex_val,
+          lex_segments:  lex_segs,
+          caller_offset: 4
+        )
+        Legion::Logging::Hooks.fire(level, event)
       end
     end
   end
