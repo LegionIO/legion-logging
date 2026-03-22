@@ -5,6 +5,8 @@ require 'spec_helper'
 require 'legion/logging'
 
 RSpec.describe Legion::Logging do
+  before { Legion::Logging.setup(level: 'debug', async: false) }
+
   before do
     @logger = Legion::Logging::Logger.new(level: 'debug')
   end
