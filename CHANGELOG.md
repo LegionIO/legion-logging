@@ -1,6 +1,12 @@
 # Legion::Logging Changelog
 
-## [Unreleased]
+## [1.3.2] - 2026-03-22
+
+### Added
+- `Legion::Logging::Helper` module: injectable `log` mixin for LEX extensions
+- Derives logger tags from `segments`, `lex_filename`, or class name (in priority order)
+- Passes through `settings[:logger]` config when available
+- Allows LEX gems to use `legion-logging` directly instead of requiring the full LegionIO framework
 
 ## [1.3.1] - 2026-03-22
 
