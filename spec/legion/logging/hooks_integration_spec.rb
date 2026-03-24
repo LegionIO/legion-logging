@@ -3,7 +3,7 @@
 require 'legion/logging'
 
 RSpec.describe 'Logging hooks integration' do
-  let(:logger) { Legion::Logging::Logger.new(level: 'debug', lex: 'slack') }
+  let(:logger) { Legion::Logging::Logger.new(level: 'debug', lex: 'slack', async: false) }
   let(:received_events) { [] }
 
   before do

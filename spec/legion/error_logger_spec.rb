@@ -6,7 +6,7 @@ require 'legion/logging'
 
 RSpec.describe Legion::Logging do
   it 'can create logger class' do
-    @logger = Legion::Logging::Logger.new(level: 'error')
+    @logger = Legion::Logging::Logger.new(level: 'error', async: false)
 
     expect(@logger.class).to be_a Class
     expect(@logger.log).to be_a_kind_of Logger
@@ -15,7 +15,7 @@ RSpec.describe Legion::Logging do
 
   describe 'log level debug' do
     before do
-      @logger = Legion::Logging::Logger.new(level: 'error')
+      @logger = Legion::Logging::Logger.new(level: 'error', async: false)
     end
 
     it 'can log error messages' do
@@ -31,7 +31,7 @@ RSpec.describe Legion::Logging do
 
   describe 'can log with level set to error' do
     before do
-      @logger = Legion::Logging::Logger.new(level: 'error')
+      @logger = Legion::Logging::Logger.new(level: 'error', async: false)
     end
 
     it 'will show fatal, error and warn messages' do

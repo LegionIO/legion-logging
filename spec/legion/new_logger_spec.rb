@@ -8,7 +8,7 @@ RSpec.describe Legion::Logging do
   before { Legion::Logging.setup(level: 'debug', async: false) }
 
   it 'can create logger class' do
-    @logger = Legion::Logging::Logger.new(level: 'debug')
+    @logger = Legion::Logging::Logger.new(level: 'debug', async: false)
 
     expect(@logger.class).to be_a Class
     expect(@logger.log).to be_a_kind_of Logger
@@ -17,7 +17,7 @@ RSpec.describe Legion::Logging do
 
   describe 'log level debug' do
     before do
-      @logger = Legion::Logging::Logger.new(level: 'info')
+      @logger = Legion::Logging::Logger.new(level: 'info', async: false)
     end
 
     it 'can log info messages' do
@@ -28,7 +28,7 @@ RSpec.describe Legion::Logging do
 
   describe 'it can trace' do
     before do
-      @logger = Legion::Logging::Logger.new(level: 'debug', trace: true)
+      @logger = Legion::Logging::Logger.new(level: 'debug', trace: true, async: false)
     end
 
     it 'can log trace' do

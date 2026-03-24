@@ -70,14 +70,14 @@ RSpec.describe 'dual output logging' do
   end
 
   it 'works with Logger instances' do
-    logger = Legion::Logging::Logger.new(level: 'info', log_file: log_file)
+    logger = Legion::Logging::Logger.new(level: 'info', log_file: log_file, async: false)
 
     expect { logger.info('instance dual') }.to output(/instance dual/).to_stdout_from_any_process
     expect(File.read(log_file)).to include('instance dual')
   end
 
   it 'Logger instance with log_stdout false writes to file only' do
-    logger = Legion::Logging::Logger.new(level: 'info', log_file: log_file, log_stdout: false)
+    logger = Legion::Logging::Logger.new(level: 'info', log_file: log_file, log_stdout: false, async: false)
 
     expect { logger.info('file only instance') }.not_to output(/file only instance/).to_stdout_from_any_process
     expect(File.read(log_file)).to include('file only instance')
