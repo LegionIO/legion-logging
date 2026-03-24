@@ -2,7 +2,7 @@
 
 Logging module for the [LegionIO](https://github.com/LegionIO/LegionIO) framework. Provides colorized console output via Rainbow, structured JSON logging, multi-output IO, and a consistent logging interface across all Legion gems and extensions.
 
-**Version**: 1.3.0
+**Version**: 1.3.2
 
 ## Installation
 
@@ -78,6 +78,21 @@ Legion::Logging::SIEMExporter.format_for_elk(event, index: 'legion')
 ```
 
 PHI patterns redacted: SSN (`###-##-####`), phone (`###-###-####`), MRN (`XX#######`), DOB (`##/##/####`).
+
+### Helper Mixin
+
+`Legion::Logging::Helper` is an injectable mixin for LEX extensions. It derives logger tags from `segments`, `lex_filename`, or class name automatically, and passes through `settings[:logger]` config when available. Allows LEX gems to use `legion-logging` directly without requiring the full LegionIO framework.
+
+```ruby
+class MyRunner
+  include Legion::Logging::Helper
+
+  def run
+    log.info("starting")
+    log.debug("details")
+  end
+end
+```
 
 ## Requirements
 
