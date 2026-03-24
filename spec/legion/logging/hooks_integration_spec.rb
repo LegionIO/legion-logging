@@ -58,7 +58,7 @@ RSpec.describe 'Logging hooks integration' do
       Legion::Logging.on_error { |event| received_events << event }
       logger.error('lex error')
       expect(received_events.size).to eq(1)
-      expect(received_events.first[:lex]).to eq('lex-slack')
+      expect(received_events.first[:lex]).to eq('slack')
     end
   end
 

@@ -29,9 +29,9 @@ module Legion
 
         def derive_lex_source(lex, lex_segments)
           if lex_segments.is_a?(Array) && !lex_segments.empty?
-            "lex-#{lex_segments.join('-')}"
+            lex_segments.join('-')
           elsif lex && !lex.to_s.empty?
-            "lex-#{lex}"
+            lex.to_s
           end
         end
 
@@ -71,7 +71,9 @@ module Legion
         def add_gem_info(event, lex_source)
           return unless lex_source
 
-          spec = Gem::Specification.find_by_name(lex_source)
+          spec = resolve_gem_spec(lex_source)
+          return unless spec
+
           event[:gem] = {
             name:            spec.name,
             version:         spec.version.to_s,
@@ -79,8 +81,14 @@ module Legion
             homepage:        spec.metadata['homepage_uri'] || spec.homepage,
             path:            spec.full_gem_path
           }.compact
-        rescue Gem::MissingSpecError, ArgumentError => e
-          warn("Legion::Logging::EventBuilder#add_gem_info failed for #{lex_source}: #{e.message}")
+        end
+
+        def resolve_gem_spec(name)
+          [name, "lex-#{name}", "legion-#{name}"].each do |candidate|
+            return Gem::Specification.find_by_name(candidate)
+          rescue Gem::MissingSpecError
+            next
+          end
           nil
         end
 

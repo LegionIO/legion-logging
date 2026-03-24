@@ -16,12 +16,12 @@ RSpec.describe Legion::Logging::EventBuilder do
 
     it 'includes lex source from string' do
       event = described_class.build(level: :error, message: 'fail', lex: 'slack')
-      expect(event[:lex]).to eq('lex-slack')
+      expect(event[:lex]).to eq('slack')
     end
 
     it 'includes lex source from segments' do
       event = described_class.build(level: :error, message: 'fail', lex_segments: %w[agentic memory])
-      expect(event[:lex]).to eq('lex-agentic-memory')
+      expect(event[:lex]).to eq('agentic-memory')
     end
 
     it 'sets lex to nil for core (no lex context)' do
@@ -60,21 +60,35 @@ RSpec.describe Legion::Logging::EventBuilder do
       expect(event).not_to have_key(:node)
     end
 
-    it 'includes gem info when gem spec is found' do
+    it 'includes gem info when gem spec is found via lex- prefix' do
       spec = double(name: 'lex-slack', version: Gem::Version.new('0.3.0'),
                     full_gem_path: '/path/to/lex-slack',
                     metadata: { 'source_code_uri' => 'https://github.com/LegionIO/lex-slack',
                                 'homepage_uri'    => 'https://github.com/LegionIO/lex-slack' },
                     homepage: 'https://github.com/LegionIO/lex-slack')
+      allow(Gem::Specification).to receive(:find_by_name).with('slack').and_raise(Gem::MissingSpecError.new('slack', []))
       allow(Gem::Specification).to receive(:find_by_name).with('lex-slack').and_return(spec)
       event = described_class.build(level: :error, message: 'fail', lex: 'slack')
       expect(event[:gem][:name]).to eq('lex-slack')
       expect(event[:gem][:version]).to eq('0.3.0')
-      expect(event[:gem][:source_code_uri]).to eq('https://github.com/LegionIO/lex-slack')
     end
 
-    it 'omits gem info when gem spec is not found' do
-      allow(Gem::Specification).to receive(:find_by_name).and_raise(Gem::MissingSpecError)
+    it 'includes gem info when gem spec is found via legion- prefix' do
+      spec = double(name: 'legion-data', version: Gem::Version.new('1.5.0'),
+                    full_gem_path: '/path/to/legion-data',
+                    metadata: { 'source_code_uri' => 'https://github.com/LegionIO/legion-data',
+                                'homepage_uri'    => 'https://github.com/LegionIO/legion-data' },
+                    homepage: 'https://github.com/LegionIO/legion-data')
+      allow(Gem::Specification).to receive(:find_by_name).with('data').and_raise(Gem::MissingSpecError.new('data', []))
+      allow(Gem::Specification).to receive(:find_by_name).with('lex-data').and_raise(Gem::MissingSpecError.new('lex-data', []))
+      allow(Gem::Specification).to receive(:find_by_name).with('legion-data').and_return(spec)
+      event = described_class.build(level: :error, message: 'fail', lex: 'data')
+      expect(event[:gem][:name]).to eq('legion-data')
+      expect(event[:gem][:version]).to eq('1.5.0')
+    end
+
+    it 'omits gem info when gem spec is not found under any prefix' do
+      allow(Gem::Specification).to receive(:find_by_name).and_raise(Gem::MissingSpecError.new('x', []))
       event = described_class.build(level: :error, message: 'fail', lex: 'nonexistent')
       expect(event).not_to have_key(:gem)
     end

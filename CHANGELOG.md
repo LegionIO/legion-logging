@@ -1,5 +1,11 @@
 # Legion::Logging Changelog
 
+## [1.3.4] - 2026-03-24
+
+### Fixed
+- `EventBuilder#derive_lex_source` no longer blindly prepends `lex-` to all source names (was causing `add_gem_info` to fail for core gems like `legion-data` with `Could not find 'lex-data'`)
+- `EventBuilder#add_gem_info` now tries raw name, `lex-<name>`, and `legion-<name>` prefixes when resolving gem specs (extracted to `resolve_gem_spec` method)
+
 ## [1.3.3] - 2026-03-24
 
 ### Changed
