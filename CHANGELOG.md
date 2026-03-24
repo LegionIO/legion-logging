@@ -1,5 +1,10 @@
 # Legion::Logging Changelog
 
+## [1.3.3] - 2026-03-24
+
+### Changed
+- Reindex docs: update CLAUDE.md and README with AsyncWriter and Helper module docs
+
 ## [1.3.2] - 2026-03-22
 
 ### Added
