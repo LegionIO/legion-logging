@@ -1,5 +1,15 @@
 # Legion::Logging Changelog
 
+## [1.3.5] - 2026-03-24
+
+### Added
+- Automatic PII/PHI redaction in log write path: all log methods (`debug`, `info`, `warn`, `error`, `fatal`, `unknown`) pass string messages through `Legion::Logging::Redactor.redact_string` when `logging.redaction.enabled` is `true` (default: `false`)
+- `maybe_redact(message)` private helper on `Legion::Logging::Methods` — no-ops when redaction is disabled, `Redactor` is not defined, or message is not a string
+- Hook callbacks (`on_warn`, `on_error`, `on_fatal`) receive already-redacted message so no PHI leaks through hook dispatch
+
+### Fixed
+- `redaction_enabled?` guards against recursive `Legion::Settings::Loader` initialization by checking `@loader` ivar directly before calling `dig`; prevents infinite recursion when settings bootstrap calls `Legion::Logging.warn`
+
 ## [1.3.4] - 2026-03-24
 
 ### Fixed
