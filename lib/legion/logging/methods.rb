@@ -132,7 +132,10 @@ module Legion
       def redaction_enabled?
         return false unless defined?(Legion::Settings)
 
-        Legion::Settings.dig(:logging, :redaction, :enabled) == true
+        loader = Legion::Settings.instance_variable_get(:@loader)
+        return false unless loader
+
+        loader.dig(:logging, :redaction, :enabled) == true
       rescue StandardError
         false
       end

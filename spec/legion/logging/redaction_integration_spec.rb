@@ -15,10 +15,13 @@ RSpec.describe 'Legion::Logging redaction integration' do
   end
 
   context 'when logging.redaction.enabled is true' do
+    let(:fake_loader) { double('loader') }
+
     before do
       stub_const('Legion::Settings', Module.new)
-      allow(Legion::Settings).to receive(:dig).and_return(nil)
-      allow(Legion::Settings).to receive(:dig).with(:logging, :redaction, :enabled).and_return(true)
+      Legion::Settings.instance_variable_set(:@loader, fake_loader)
+      allow(fake_loader).to receive(:dig).and_return(nil)
+      allow(fake_loader).to receive(:dig).with(:logging, :redaction, :enabled).and_return(true)
     end
 
     it 'passes string messages through Redactor.redact_string on info' do
@@ -48,10 +51,13 @@ RSpec.describe 'Legion::Logging redaction integration' do
   end
 
   context 'when logging.redaction.enabled is false' do
+    let(:fake_loader) { double('loader') }
+
     before do
       stub_const('Legion::Settings', Module.new)
-      allow(Legion::Settings).to receive(:dig).and_return(nil)
-      allow(Legion::Settings).to receive(:dig).with(:logging, :redaction, :enabled).and_return(false)
+      Legion::Settings.instance_variable_set(:@loader, fake_loader)
+      allow(fake_loader).to receive(:dig).and_return(nil)
+      allow(fake_loader).to receive(:dig).with(:logging, :redaction, :enabled).and_return(false)
     end
 
     it 'does not call Redactor.redact_string' do
