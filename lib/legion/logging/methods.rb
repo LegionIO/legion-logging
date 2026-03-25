@@ -21,6 +21,7 @@ module Legion
         return unless log.level < 1
 
         message = yield if message.nil? && block_given?
+        message = maybe_redact(message)
         message = Rainbow(message).blue if @color
         writer = @async_writer
         if writer&.alive?
@@ -34,6 +35,7 @@ module Legion
         return unless log.level < 2
 
         message = yield if message.nil? && block_given?
+        message = maybe_redact(message)
         message = Rainbow(message).green if @color
         writer = @async_writer
         if writer&.alive?
@@ -47,6 +49,7 @@ module Legion
         return unless log.level < 3
 
         message = yield if message.nil? && block_given?
+        message = maybe_redact(message)
         raw = message
         message = Rainbow(message).yellow if @color
         writer = @async_writer
@@ -63,6 +66,7 @@ module Legion
         return unless log.level < 4
 
         message = yield if message.nil? && block_given?
+        message = maybe_redact(message)
         raw = message
         message = Rainbow(message).red if @color
         writer = @async_writer
@@ -79,6 +83,7 @@ module Legion
         return unless log.level < 5
 
         message = yield if message.nil? && block_given?
+        message = maybe_redact(message)
         raw = message
         message = Rainbow(message).darkred if @color
         log.fatal(message)
@@ -87,6 +92,7 @@ module Legion
 
       def unknown(message = nil)
         message = yield if message.nil? && block_given?
+        message = maybe_redact(message)
         message = Rainbow(message).purple if @color
         writer = @async_writer
         if writer&.alive?
@@ -112,6 +118,24 @@ module Legion
       end
 
       private
+
+      def maybe_redact(message)
+        return message unless message.is_a?(String)
+        return message unless redaction_enabled?
+        return message unless defined?(Legion::Logging::Redactor)
+
+        Legion::Logging::Redactor.redact_string(message)
+      rescue StandardError
+        message
+      end
+
+      def redaction_enabled?
+        return false unless defined?(Legion::Settings)
+
+        Legion::Settings.dig(:logging, :redaction, :enabled) == true
+      rescue StandardError
+        false
+      end
 
       def build_hook_context(level, message)
         return nil unless Legion::Logging::Hooks.enabled?

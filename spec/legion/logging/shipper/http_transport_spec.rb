@@ -11,6 +11,7 @@ RSpec.describe Legion::Logging::Shipper::HttpTransport do
     before do
       stub_const('Legion::Settings', Module.new)
       allow(Legion::Settings).to receive(:[]).and_return(nil)
+      allow(Legion::Settings).to receive(:dig).and_return(nil)
       allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :endpoint).and_return(endpoint)
       allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :auth_token).and_return(nil)
     end

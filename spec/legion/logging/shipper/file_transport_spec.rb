@@ -55,6 +55,7 @@ RSpec.describe Legion::Logging::Shipper::FileTransport do
     it 'returns false and does not raise on write error' do
       stub_const('Legion::Settings', Module.new)
       allow(Legion::Settings).to receive(:[]).and_return(nil)
+      allow(Legion::Settings).to receive(:dig).and_return(nil)
       allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :file, :path)
                                               .and_return('/nonexistent_root_dir/siem.log')
       allow(FileUtils).to receive(:mkdir_p).and_raise(Errno::EACCES, 'permission denied')
