@@ -25,7 +25,7 @@ module Legion
         message = Rainbow(message).blue if @color
         writer = @async_writer
         if writer&.alive?
-          writer.push(AsyncWriter::LogEntry.new(level: :debug, message: message, hook_context: nil))
+          writer.push(AsyncWriter::LogEntry.new(level: :debug, message: message, writer_context: nil))
         else
           log.debug(message)
         end
@@ -39,7 +39,7 @@ module Legion
         message = Rainbow(message).green if @color
         writer = @async_writer
         if writer&.alive?
-          writer.push(AsyncWriter::LogEntry.new(level: :info, message: message, hook_context: nil))
+          writer.push(AsyncWriter::LogEntry.new(level: :info, message: message, writer_context: nil))
         else
           log.info(message)
         end
@@ -54,11 +54,11 @@ module Legion
         message = Rainbow(message).yellow if @color
         writer = @async_writer
         if writer&.alive?
-          ctx = build_hook_context(:warn, raw)
-          writer.push(AsyncWriter::LogEntry.new(level: :warn, message: message, hook_context: ctx))
+          ctx = build_writer_context(:warn, raw)
+          writer.push(AsyncWriter::LogEntry.new(level: :warn, message: message, writer_context: ctx))
         else
           log.warn(message)
-          fire_hooks(:warn, raw)
+          fire_log_writer(:warn, raw)
         end
       end
 
@@ -71,11 +71,11 @@ module Legion
         message = Rainbow(message).red if @color
         writer = @async_writer
         if writer&.alive?
-          ctx = build_hook_context(:error, raw)
-          writer.push(AsyncWriter::LogEntry.new(level: :error, message: message, hook_context: ctx))
+          ctx = build_writer_context(:error, raw)
+          writer.push(AsyncWriter::LogEntry.new(level: :error, message: message, writer_context: ctx))
         else
           log.error(message)
-          fire_hooks(:error, raw)
+          fire_log_writer(:error, raw)
         end
       end
 
@@ -87,7 +87,7 @@ module Legion
         raw = message
         message = Rainbow(message).darkred if @color
         log.fatal(message)
-        fire_hooks(:fatal, raw)
+        fire_log_writer(:fatal, raw)
       end
 
       def unknown(message = nil)
@@ -96,7 +96,7 @@ module Legion
         message = Rainbow(message).purple if @color
         writer = @async_writer
         if writer&.alive?
-          writer.push(AsyncWriter::LogEntry.new(level: :unknown, message: message, hook_context: nil))
+          writer.push(AsyncWriter::LogEntry.new(level: :unknown, message: message, writer_context: nil))
         else
           log.unknown(message)
         end
@@ -140,10 +140,7 @@ module Legion
         false
       end
 
-      def build_hook_context(level, message)
-        return nil unless Legion::Logging::Hooks.enabled?
-        return nil if Legion::Logging::Hooks.hooks[level].empty?
-
+      def build_writer_context(level, message)
         lex_val  = instance_variable_defined?(:@lex) ? @lex : nil
         lex_segs = instance_variable_defined?(:@lex_segments) ? @lex_segments : nil
 
@@ -157,10 +154,7 @@ module Legion
         { level: level, event: event }
       end
 
-      def fire_hooks(level, message)
-        return unless Legion::Logging::Hooks.enabled?
-        return if Legion::Logging::Hooks.hooks[level].empty?
-
+      def fire_log_writer(level, message)
         lex_val  = instance_variable_defined?(:@lex) ? @lex : nil
         lex_segs = instance_variable_defined?(:@lex_segments) ? @lex_segments : nil
 
@@ -171,7 +165,12 @@ module Legion
           lex_segments:  lex_segs,
           caller_offset: 4
         )
-        Legion::Logging::Hooks.fire(level, event)
+        lex_name = event[:lex] || 'core'
+        component = event.dig(:caller, :file).to_s[%r{/(runners|actors|transport|helpers|builders)/}, 1] || 'unknown'
+        routing_key = "legion.logging.log.#{level}.#{lex_name}.#{component}"
+        Legion::Logging.log_writer.call(event, routing_key: routing_key)
+      rescue StandardError
+        nil
       end
     end
   end

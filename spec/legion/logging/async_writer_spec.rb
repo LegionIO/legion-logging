@@ -41,7 +41,7 @@ RSpec.describe Legion::Logging::AsyncWriter do
 
     it 'writes entries to the logger' do
       entry = Legion::Logging::AsyncWriter::LogEntry.new(
-        level: :info, message: 'async test', hook_context: nil
+        level: :info, message: 'async test', writer_context: nil
       )
       subject.push(entry)
       subject.stop
@@ -51,7 +51,7 @@ RSpec.describe Legion::Logging::AsyncWriter do
       messages = []
       allow(logger).to receive(:info) { |msg| messages << msg }
 
-      3.times { |i| subject.push(Legion::Logging::AsyncWriter::LogEntry.new(level: :info, message: "msg-#{i}", hook_context: nil)) }
+      3.times { |i| subject.push(Legion::Logging::AsyncWriter::LogEntry.new(level: :info, message: "msg-#{i}", writer_context: nil)) }
       subject.stop
 
       expect(messages).to eq(%w[msg-0 msg-1 msg-2])
@@ -62,11 +62,11 @@ RSpec.describe Legion::Logging::AsyncWriter do
     subject { described_class.new(logger, buffer_size: 2) }
 
     it 'blocks the caller when the queue is full' do
-      2.times { |i| subject.push(Legion::Logging::AsyncWriter::LogEntry.new(level: :info, message: "fill-#{i}", hook_context: nil)) }
+      2.times { |i| subject.push(Legion::Logging::AsyncWriter::LogEntry.new(level: :info, message: "fill-#{i}", writer_context: nil)) }
 
       blocked = true
       pusher = Thread.new do
-        subject.push(Legion::Logging::AsyncWriter::LogEntry.new(level: :info, message: 'overflow', hook_context: nil))
+        subject.push(Legion::Logging::AsyncWriter::LogEntry.new(level: :info, message: 'overflow', writer_context: nil))
         blocked = false
       end
 
@@ -86,47 +86,35 @@ RSpec.describe Legion::Logging::AsyncWriter do
       allow(logger).to receive(:warn) { |msg| messages << msg }
 
       subject.start
-      5.times { |i| subject.push(Legion::Logging::AsyncWriter::LogEntry.new(level: :warn, message: "drain-#{i}", hook_context: nil)) }
+      5.times { |i| subject.push(Legion::Logging::AsyncWriter::LogEntry.new(level: :warn, message: "drain-#{i}", writer_context: nil)) }
       subject.stop
 
       expect(messages).to eq((0..4).map { |i| "drain-#{i}" })
     end
   end
 
-  describe 'hook context' do
+  describe 'writer context' do
     subject { described_class.new(logger) }
 
-    before do
-      Legion::Logging::Hooks.clear!
-      Legion::Logging::Hooks.enable!
-      subject.start
-    end
+    before { subject.start }
 
-    after do
-      Legion::Logging::Hooks.disable!
-      Legion::Logging::Hooks.clear!
-    end
+    it 'calls log_writer when writer_context is present' do
+      captured = nil
+      Legion::Logging.log_writer = lambda { |event, routing_key:|
+        captured = { event: event, routing_key: routing_key }
+      }
 
-    it 'fires hooks on the writer thread' do
-      fired_events = []
-      hook_thread = nil
-      Legion::Logging::Hooks.register(:error) do |event|
-        fired_events << event
-        hook_thread = Thread.current
-      end
-
-      writer_thread = subject.instance_variable_get(:@thread)
-      event = { level: :error, message: 'hook test' }
+      event = { level: :error, message: 'writer test', lex: 'core' }
       entry = Legion::Logging::AsyncWriter::LogEntry.new(
-        level: :error, message: 'hook test', hook_context: { level: :error, event: event }
+        level: :error, message: 'writer test',
+        writer_context: { level: :error, event: event }
       )
       subject.push(entry)
-      subject.stop
+      sleep 0.1
+      expect(captured).not_to be_nil
+      expect(captured[:event][:message]).to eq('writer test')
 
-      expect(fired_events.size).to eq(1)
-      expect(fired_events.first[:message]).to eq('hook test')
-      expect(hook_thread).to eq(writer_thread)
-      expect(hook_thread).not_to eq(Thread.current)
+      Legion::Logging.log_writer = nil
     end
   end
 
@@ -134,7 +122,7 @@ RSpec.describe Legion::Logging::AsyncWriter do
     subject { described_class.new(logger) }
 
     it 'is a frozen Data struct' do
-      entry = Legion::Logging::AsyncWriter::LogEntry.new(level: :info, message: 'test', hook_context: nil)
+      entry = Legion::Logging::AsyncWriter::LogEntry.new(level: :info, message: 'test', writer_context: nil)
       expect(entry).to be_frozen
     end
   end
@@ -168,7 +156,7 @@ RSpec.describe 'async routing through Methods' do
     Legion::Logging.info('async info')
   end
 
-  it 'routes warn through the async writer with hook context' do
+  it 'routes warn through the async writer with writer context' do
     writer = Legion::Logging.instance_variable_get(:@async_writer)
     expect(writer).to receive(:push).once
     Legion::Logging.warn('async warn')
