@@ -121,7 +121,7 @@ Legion::Logging.log_writer = ->(context, routing_key:) { publish_log(context) }
 
 ### Redactor
 
-`Legion::Logging::Redactor` redacts PII/PHI patterns (SSN, phone, MRN, DOB) plus Vault tokens, JWTs, bearer tokens, and lease IDs from log messages. Enabled opt-in via `logging.redaction.enabled: true`. Wired into all log methods in the write path.
+`Legion::Logging::Redactor` redacts PII/PHI patterns (SSN, phone, MRN, DOB) plus Vault tokens, JWTs, bearer tokens, and lease IDs from log messages. Redaction is opt-in: load the module (for example via `require 'legion/logging/redactor'`) and enable it with `logging.redaction.enabled: true`. When loaded and enabled, it is wired into all log methods in the write path.
 
 ## Requirements
 
