@@ -111,8 +111,8 @@ Legion::Logging.log_exception(exception,
 `log_writer` and `exception_writer` are pluggable lambda slots that replace the old Hooks system. Assign them to forward events to external systems:
 
 ```ruby
-Legion::Logging.exception_writer = ->(payload) { publish_to_amqp(payload) }
-Legion::Logging.log_writer = ->(context) { publish_log(context) }
+Legion::Logging.exception_writer = ->(payload, routing_key:, headers:, properties:) { publish_to_amqp(payload) }
+Legion::Logging.log_writer = ->(context, routing_key:) { publish_log(context) }
 ```
 
 ### EventBuilder

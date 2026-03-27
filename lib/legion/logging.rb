@@ -21,12 +21,15 @@ module Legion
       attr_reader :color
       attr_writer :log_writer, :exception_writer
 
+      DEFAULT_LOG_WRITER       = ->(_event, routing_key:) {}
+      DEFAULT_EXCEPTION_WRITER = ->(_event, routing_key:, headers:, properties:) {}
+
       def log_writer
-        @log_writer ||= ->(_event, routing_key:) {}
+        @log_writer || DEFAULT_LOG_WRITER
       end
 
       def exception_writer
-        @exception_writer ||= ->(_event, routing_key:, headers:, properties:) {}
+        @exception_writer || DEFAULT_EXCEPTION_WRITER
       end
 
       def setup(level: 'info', format: :text, async: true, **options)

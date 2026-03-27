@@ -1,5 +1,12 @@
 # Legion::Logging Changelog
 
+## [1.4.1] - 2026-03-27
+
+### Fixed
+- `require 'time'` added to `event_builder.rb` so `Time#iso8601` is always available in minimal Ruby environments
+- `log_writer` / `exception_writer` accessors no longer memoize the no-op default via `||=`; `@log_writer` stays `nil` until a real writer is assigned, which allows `build_writer_context` to correctly short-circuit event building when no writer is configured
+- README writer lambda examples updated to show correct keyword argument signatures matching actual call sites
+
 ## [1.4.0] - 2026-03-27
 
 ### Added
