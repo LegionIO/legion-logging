@@ -15,7 +15,7 @@ RSpec.describe 'Legion::Logging.log_exception' do
   end
 
   it 'logs the error message to stdout/file at the given level' do
-    expect(Legion::Logging).to receive(:error).with(kind_of(String)).and_call_original
+    expect(Legion::Logging.log).to receive(:error).with(kind_of(String)).and_call_original
     Legion::Logging.log_exception(error)
   end
 

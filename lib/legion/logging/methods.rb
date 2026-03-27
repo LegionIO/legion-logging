@@ -113,9 +113,9 @@ module Legion
                         gem_name: nil, lex_version: nil, gem_path: nil,
                         source_code_uri: nil, handled: false, payload_summary: nil,
                         task_id: nil, **extra)
-        # 1. Log human-readable line to stdout/file
+        # 1. Log human-readable line to stdout/file (bypass writer callbacks)
         msg = exception.respond_to?(:message) ? exception.message : exception.to_s
-        send(level, msg) if respond_to?(level)
+        log.public_send(level, msg) if respond_to?(:log) && log.respond_to?(level)
 
         # 2. Build rich exception event
         event = Legion::Logging::EventBuilder.build_exception(
@@ -138,37 +138,13 @@ module Legion
         event = Legion::Logging::Redactor.redact(event) if defined?(Legion::Logging::Redactor)
 
         # 4. Publish rich event via exception_writer
-        lex_name = event[:lex] || 'core'
-        comp = event[:component_type] || :unknown
-        routing_key = "legion.logging.exception.#{level}.#{lex_name}.#{comp}"
-
-        headers = {
-          'x-error-fingerprint' => event[:error_fingerprint],
-          'x-exception-class'   => event[:exception_class],
-          'x-handled'           => event[:handled].to_s,
-          'x-gem-name'          => event[:gem_name].to_s,
-          'x-lex-version'       => event[:lex_version].to_s,
-          'x-component-type'    => comp.to_s,
-          'x-level'             => level.to_s,
-          'x-task-id'           => event[:task_id].to_s,
-          'x-conversation-id'   => event[:conversation_id].to_s,
-          'x-user'              => event[:user].to_s
-        }
-
-        properties = {
-          content_type:   'application/json',
-          message_id:     SecureRandom.uuid,
-          correlation_id: event[:error_fingerprint],
-          timestamp:      Time.now.to_i,
-          app_id:         'legionio',
-          type:           'exception_event',
-          priority:       { warn: 0, error: 5, fatal: 9 }[level] || 5,
-          delivery_mode:  2
-        }
-
-        Legion::Logging.exception_writer.call(event, routing_key: routing_key, headers: headers, properties: properties)
-      rescue StandardError
-        nil
+        publish_exception_event(event, level)
+      rescue StandardError => e
+        if respond_to?(:log) && log.respond_to?(:warn)
+          log.warn("Failed to publish structured exception event: #{e.class}: #{e.message}")
+        else
+          warn("Failed to publish structured exception event: #{e.class}: #{e.message}")
+        end
       end
 
       def thread(kvl: false, **_opts)
@@ -202,7 +178,54 @@ module Legion
         false
       end
 
+      def publish_exception_event(event, level)
+        lex_name = event[:lex] || 'core'
+        comp     = event[:component_type] || :unknown
+        routing_key = "legion.logging.exception.#{level}.#{lex_name}.#{comp}"
+        headers     = build_exception_headers(event, comp, level)
+        properties  = build_exception_properties(event, level)
+        Legion::Logging.exception_writer.call(event, routing_key: routing_key, headers: headers, properties: properties)
+      end
+
+      def build_exception_headers(event, comp, level)
+        headers = {
+          'x-error-fingerprint' => event[:error_fingerprint],
+          'x-exception-class'   => event[:exception_class],
+          'x-handled'           => event[:handled].to_s,
+          'x-gem-name'          => event[:gem_name].to_s,
+          'x-lex-version'       => event[:lex_version].to_s,
+          'x-component-type'    => comp.to_s,
+          'x-level'             => level.to_s
+        }
+        append_optional_header(headers, 'x-task-id', event[:task_id])
+        append_optional_header(headers, 'x-conversation-id', event[:conversation_id])
+        append_optional_header(headers, 'x-user', event[:user])
+        headers
+      end
+
+      def append_optional_header(headers, key, value)
+        return if value.nil?
+        return if value.respond_to?(:empty?) && value.empty?
+
+        headers[key] = value.to_s
+      end
+
+      def build_exception_properties(event, level)
+        {
+          content_type:   'application/json',
+          message_id:     SecureRandom.uuid,
+          correlation_id: event[:error_fingerprint],
+          timestamp:      Time.now.to_i,
+          app_id:         'legionio',
+          type:           'exception_event',
+          priority:       { warn: 0, error: 5, fatal: 9 }[level] || 5,
+          delivery_mode:  2
+        }
+      end
+
       def build_writer_context(level, message)
+        return nil if Legion::Logging.instance_variable_get(:@log_writer).nil?
+
         lex_val  = instance_variable_defined?(:@lex) ? @lex : nil
         lex_segs = instance_variable_defined?(:@lex_segments) ? @lex_segments : nil
 

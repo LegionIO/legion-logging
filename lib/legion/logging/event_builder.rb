@@ -263,22 +263,36 @@ module Legion
           str.byteslice(0, max).scrub
         end
 
+        def safe_json_bytesize(object)
+          ::JSON.generate(object).bytesize
+        rescue ::JSON::GeneratorError, TypeError
+          object.to_s.bytesize
+        end
+
         def truncate_payload(payload)
           return nil unless payload
 
-          str = payload.is_a?(String) ? payload : ::JSON.generate(payload)
+          str = if payload.is_a?(String)
+                  payload
+                else
+                  begin
+                    ::JSON.generate(payload)
+                  rescue ::JSON::GeneratorError, TypeError
+                    payload.to_s
+                  end
+                end
           truncate_bytes(str, MAX_PAYLOAD_BYTES)
         end
 
         def enforce_total_size!(event)
-          return if ::JSON.generate(event).bytesize <= MAX_TOTAL_BYTES
+          return if safe_json_bytesize(event) <= MAX_TOTAL_BYTES
 
           event.delete(:payload_summary)
-          return if ::JSON.generate(event).bytesize <= MAX_TOTAL_BYTES
+          return if safe_json_bytesize(event) <= MAX_TOTAL_BYTES
 
           bt = event[:backtrace]
           event[:backtrace] = bt.first(BACKTRACE_FALLBACK_FRAMES) if bt.is_a?(Array)
-          return if ::JSON.generate(event).bytesize <= MAX_TOTAL_BYTES
+          return if safe_json_bytesize(event) <= MAX_TOTAL_BYTES
 
           event[:message] = truncate_bytes(event[:message].to_s, 1024)
         end

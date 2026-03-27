@@ -110,7 +110,8 @@ RSpec.describe Legion::Logging::AsyncWriter do
         writer_context: { level: :error, event: event }
       )
       subject.push(entry)
-      sleep 0.1
+      deadline = Time.now + 2
+      sleep 0.01 while captured.nil? && Time.now < deadline
       expect(captured).not_to be_nil
       expect(captured[:event][:message]).to eq('writer test')
 
