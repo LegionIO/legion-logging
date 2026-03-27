@@ -113,6 +113,7 @@ module Legion
                         gem_name: nil, lex_version: nil, gem_path: nil,
                         source_code_uri: nil, handled: false, payload_summary: nil,
                         task_id: nil, **extra)
+        level = level.to_sym if level.respond_to?(:to_sym)
         # 1. Log human-readable line to stdout/file (bypass writer callbacks)
         msg = exception.respond_to?(:message) ? exception.message : exception.to_s
         log.public_send(level, msg) if respond_to?(:log) && log.respond_to?(level)
@@ -254,8 +255,10 @@ module Legion
         component = event.dig(:caller, :file).to_s[%r{/(runners|actors|transport|helpers|builders)/}, 1] || 'unknown'
         routing_key = "legion.logging.log.#{level}.#{lex_name}.#{component}"
         Legion::Logging.log_writer.call(event, routing_key: routing_key)
-      rescue StandardError
-        nil
+      rescue StandardError => e
+        if respond_to?(:log) && log.respond_to?(:warn)
+          log.warn("fire_log_writer failed for level=#{level}, routing_key=#{routing_key}: #{e.class}: #{e.message}")
+        end
       end
     end
   end

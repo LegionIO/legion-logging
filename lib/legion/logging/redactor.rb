@@ -13,8 +13,8 @@ module Legion
         vault_token:    /\bhvs\.[A-Za-z0-9_-]{20,}\b/,
         vault_lease_id: %r{\b[a-z_-]+/creds/[a-z_-]+/[A-Za-z0-9-]{36}\b},
         jwt:            /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/,
-        vault_uri:      %r{vault://[^\s]+},
-        lease_uri:      %r{lease://[^\s]+},
+        vault_uri:      %r{vault://[^"',\]\x7d\s]+},
+        lease_uri:      %r{lease://[^"',\]\x7d\s]+},
         bearer_token:   %r{Bearer\s+[A-Za-z0-9._~+/=-]{20,}}i
       }.freeze
 
