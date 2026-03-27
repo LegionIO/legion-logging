@@ -4,12 +4,18 @@ module Legion
   module Logging
     module Redactor
       PATTERNS = {
-        ssn:         /\b\d{3}-\d{2}-\d{4}\b/,
-        email:       /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/,
-        phone:       /\b(?:\+1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/,
-        mrn:         /\bMRN[:\s]*\d{6,10}\b/i,
-        dob:         %r{\bDOB[:\s]*\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b}i,
-        credit_card: /\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b/
+        ssn:            /\b\d{3}-\d{2}-\d{4}\b/,
+        email:          /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/,
+        phone:          /\b(?:\+1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/,
+        mrn:            /\bMRN[:\s]*\d{6,10}\b/i,
+        dob:            %r{\bDOB[:\s]*\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b}i,
+        credit_card:    /\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b/,
+        vault_token:    /\bhvs\.[A-Za-z0-9_-]{20,}\b/,
+        vault_lease_id: %r{\b[a-z_-]+/creds/[a-z_-]+/[A-Za-z0-9-]{36}\b},
+        jwt:            /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/,
+        vault_uri:      %r{vault://[^\s]+},
+        lease_uri:      %r{lease://[^\s]+},
+        bearer_token:   %r{Bearer\s+[A-Za-z0-9._~+/=-]{20,}}i
       }.freeze
 
       SENSITIVE_FIELDS = %w[password secret token api_key authorization].freeze

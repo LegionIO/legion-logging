@@ -155,6 +155,41 @@ RSpec.describe Legion::Logging::Redactor do
     end
   end
 
+  describe 'vault and credential patterns' do
+    before { described_class.send(:reset_pattern_cache!) }
+    after  { described_class.send(:reset_pattern_cache!) }
+
+    it 'redacts Vault tokens' do
+      str = 'token was hvs.CAESIJx7ZM_this_is_fake_ABCdef1234567890'
+      expect(described_class.redact_string(str)).not_to include('hvs.')
+    end
+
+    it 'redacts Vault lease IDs' do
+      str = 'lease_id: rabbitmq/creds/agent/a1b2c3d4-e5f6-7890-abcd-ef1234567890'
+      expect(described_class.redact_string(str)).not_to include('rabbitmq/creds/')
+    end
+
+    it 'redacts JWT tokens' do
+      str = 'auth: eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkw.SflKxwRJSMeKKF2QT4fwpM'
+      expect(described_class.redact_string(str)).not_to include('eyJ')
+    end
+
+    it 'redacts vault:// URIs' do
+      str = 'resolved from vault://secret/data/rabbitmq#password'
+      expect(described_class.redact_string(str)).not_to include('vault://')
+    end
+
+    it 'redacts lease:// URIs' do
+      str = 'using lease://rabbitmq#password'
+      expect(described_class.redact_string(str)).not_to include('lease://')
+    end
+
+    it 'redacts Bearer tokens' do
+      str = 'Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.long_token_here.sig'
+      expect(described_class.redact_string(str)).not_to include('Bearer eyJ')
+    end
+  end
+
   describe 'REDACTED constant' do
     it 'is the expected replacement string' do
       expect(described_class::REDACTED).to eq('[REDACTED]')
