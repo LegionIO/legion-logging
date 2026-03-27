@@ -104,4 +104,199 @@ RSpec.describe Legion::Logging::EventBuilder do
       expect(event[:message]).to eq('red error')
     end
   end
+
+  describe '.build_exception' do
+    let(:exception) do
+      exc = RuntimeError.new('something went wrong')
+      exc.set_backtrace([
+                          '/gems/legion-data-1.6.9/lib/legion/data.rb:42:in `connect`',
+                          '/gems/lex-apollo-0.4.14/lib/lex/apollo/runner.rb:17:in `call`',
+                          '/app/lib/main.rb:5:in `<main>`'
+                        ])
+      exc
+    end
+
+    it 'includes exception_class as top-level key' do
+      event = described_class.build_exception(exception: exception, level: :error)
+      expect(event[:exception_class]).to eq('RuntimeError')
+    end
+
+    it 'includes message from exception' do
+      event = described_class.build_exception(exception: exception, level: :error)
+      expect(event[:message]).to eq('something went wrong')
+    end
+
+    it 'includes backtrace as Array' do
+      event = described_class.build_exception(exception: exception, level: :error)
+      expect(event[:backtrace]).to be_an(Array)
+      expect(event[:backtrace]).not_to be_empty
+    end
+
+    it 'includes flat caller fields from backtrace' do
+      event = described_class.build_exception(exception: exception, level: :error)
+      expect(event[:caller_file]).to be_a(String)
+      expect(event[:caller_line]).to be_an(Integer)
+      expect(event[:caller_function]).to be_a(String)
+    end
+
+    it 'includes lex and component_type' do
+      event = described_class.build_exception(exception: exception, level: :error,
+                                              lex: 'apollo', component_type: 'runner')
+      expect(event[:lex]).to eq('apollo')
+      expect(event[:component_type]).to eq('runner')
+    end
+
+    it 'includes version fields gem_name, lex_version, ruby_version' do
+      event = described_class.build_exception(exception: exception, level: :error,
+                                              gem_name: 'lex-apollo', lex_version: '0.4.14')
+      expect(event[:gem_name]).to eq('lex-apollo')
+      expect(event[:lex_version]).to eq('0.4.14')
+      expect(event[:ruby_version]).to be_a(String)
+      expect(event[:ruby_version]).to include(RUBY_VERSION)
+    end
+
+    it 'includes legion_versions hash with only legion-* and lex-* gems' do
+      event = described_class.build_exception(exception: exception, level: :error)
+      expect(event[:legion_versions]).to be_a(Hash)
+      event[:legion_versions].each_key do |name|
+        expect(name).to match(/\A(legion-|lex-)/)
+      end
+    end
+
+    it 'includes error_fingerprint matching 32-char hex' do
+      event = described_class.build_exception(exception: exception, level: :error)
+      expect(event[:error_fingerprint]).to match(/\A[0-9a-f]{32}\z/)
+    end
+
+    it 'produces the same fingerprint for the same error' do
+      event1 = described_class.build_exception(exception: exception, level: :error)
+      event2 = described_class.build_exception(exception: exception, level: :error)
+      expect(event1[:error_fingerprint]).to eq(event2[:error_fingerprint])
+    end
+
+    it 'includes handled flag' do
+      handled_event   = described_class.build_exception(exception: exception, level: :error, handled: true)
+      unhandled_event = described_class.build_exception(exception: exception, level: :error, handled: false)
+      expect(handled_event[:handled]).to be true
+      expect(unhandled_event[:handled]).to be false
+    end
+
+    it 'includes payload_summary when provided' do
+      event = described_class.build_exception(exception: exception, level: :error,
+                                              payload_summary: { key: 'value' }.to_json)
+      expect(event[:payload_summary]).to be_a(String)
+    end
+
+    it 'includes identity fields node, pid, thread, timestamp, level' do
+      stub_const('Legion::Settings', double)
+      allow(Legion::Settings).to receive(:[]).with(:client).and_return({ name: 'test-node' })
+      event = described_class.build_exception(exception: exception, level: :error)
+      expect(event[:node]).to eq('test-node')
+      expect(event[:pid]).to eq(Process.pid)
+      expect(event[:thread]).to eq(Thread.current.object_id)
+      expect(event[:timestamp]).to be_a(String)
+      expect(event[:level]).to eq(:error)
+    end
+
+    it 'includes user from ENV when Secret helper is not loaded' do
+      hide_const('Legion::Extensions::Helpers::Secret') if defined?(Legion::Extensions::Helpers::Secret)
+      event = described_class.build_exception(exception: exception, level: :error)
+      expect(event[:user]).to eq(ENV.fetch('USER', nil))
+    end
+
+    it 'includes task_id when provided' do
+      event = described_class.build_exception(exception: exception, level: :error, task_id: 'abc-123')
+      expect(event[:task_id]).to eq('abc-123')
+    end
+
+    it 'omits task_id when nil' do
+      event = described_class.build_exception(exception: exception, level: :error, task_id: nil)
+      expect(event).not_to have_key(:task_id)
+    end
+
+    it 'includes conversation_id from Legion::Context session when available' do
+      session_double = double(session_id: 'sess-xyz-789')
+      context_double = double
+      allow(context_double).to receive(:current_session).and_return(session_double)
+      stub_const('Legion::Context', context_double)
+      event = described_class.build_exception(exception: exception, level: :error)
+      expect(event[:conversation_id]).to eq('sess-xyz-789')
+    end
+
+    it 'omits conversation_id when no session is active' do
+      context_double = double
+      allow(context_double).to receive(:current_session).and_return(nil)
+      stub_const('Legion::Context', context_double)
+      event = described_class.build_exception(exception: exception, level: :error)
+      expect(event).not_to have_key(:conversation_id)
+    end
+
+    it 'truncates message to 4KB' do
+      long_msg = 'x' * 8000
+      exc = RuntimeError.new(long_msg)
+      exc.set_backtrace(caller)
+      event = described_class.build_exception(exception: exc, level: :error)
+      expect(event[:message].bytesize).to be <= Legion::Logging::EventBuilder::MAX_MESSAGE_BYTES
+    end
+
+    it 'truncates payload_summary to 8KB' do
+      large_payload = 'y' * 16_000
+      event = described_class.build_exception(exception: exception, level: :error,
+                                              payload_summary: large_payload)
+      expect(event[:payload_summary].bytesize).to be <= Legion::Logging::EventBuilder::MAX_PAYLOAD_BYTES
+    end
+  end
+
+  describe '.fingerprint' do
+    let(:args) do
+      {
+        exception_class: 'RuntimeError',
+        message:         'object 0x00007f8abc123456 failed',
+        caller_file:     '/gems/lex-apollo-0.4.14/lib/lex/apollo/runner.rb',
+        caller_line:     42,
+        caller_function: 'call',
+        gem_name:        'lex-apollo',
+        component_type:  'runner',
+        backtrace:       [
+          '/gems/legion-data-1.6.9/lib/legion/data.rb:10:in `foo`',
+          '/gems/lex-apollo-0.4.14/lib/runner.rb:20:in `bar`'
+        ]
+      }
+    end
+
+    it 'returns a 32-char hex digest' do
+      result = described_class.fingerprint(**args)
+      expect(result).to match(/\A[0-9a-f]{32}\z/)
+    end
+
+    it 'strips hex addresses from message before fingerprinting' do
+      args_with_hex = args.merge(message: 'object 0x00007f8abc123456 failed')
+      args_no_hex   = args.merge(message: 'object 0xXXX failed')
+      expect(described_class.fingerprint(**args_with_hex)).to eq(described_class.fingerprint(**args_no_hex))
+    end
+
+    it 'strips gem versions from backtrace paths' do
+      args_versioned   = args.merge(backtrace: ['/gems/lex-apollo-0.4.14/lib/runner.rb:5:in `x`'])
+      args_unversioned = args.merge(backtrace: ['/gems/lex-apollo/lib/runner.rb:5:in `x`'])
+      expect(described_class.fingerprint(**args_versioned)).to eq(described_class.fingerprint(**args_unversioned))
+    end
+
+    it 'normalizes class names in object references' do
+      fp1 = described_class.fingerprint(
+        exception_class: 'NoMethodError',
+        message: 'undefined method for #<RuntimeError:0x00007f8b>',
+        caller_file: 'lib/foo.rb', caller_line: 10,
+        caller_function: 'bar', gem_name: 'lex-foo',
+        component_type: :runner, backtrace: []
+      )
+      fp2 = described_class.fingerprint(
+        exception_class: 'NoMethodError',
+        message: 'undefined method for #<TypeError:0x0000abcd>',
+        caller_file: 'lib/foo.rb', caller_line: 10,
+        caller_function: 'bar', gem_name: 'lex-foo',
+        component_type: :runner, backtrace: []
+      )
+      expect(fp1).to eq(fp2)
+    end
+  end
 end
