@@ -1,5 +1,30 @@
 # Legion::Logging Changelog
 
+## [1.4.1] - 2026-03-27
+
+### Fixed
+- `require 'time'` added to `event_builder.rb` so `Time#iso8601` is always available in minimal Ruby environments
+- `log_writer` / `exception_writer` accessors no longer memoize the no-op default via `||=`; `@log_writer` stays `nil` until a real writer is assigned, which allows `build_writer_context` to correctly short-circuit event building when no writer is configured
+- README writer lambda examples updated to show correct keyword argument signatures matching actual call sites
+
+## [1.4.0] - 2026-03-27
+
+### Added
+- `log_exception` method in `Methods` — single call for complete structured exception events
+- `EventBuilder.build_exception` — builds rich exception payloads with fingerprint, versions, flat caller keys
+- `EventBuilder.fingerprint` — MD5 fingerprint of stable error fields for dedup
+- `log_writer` / `exception_writer` pluggable lambda slots on `Legion::Logging`
+- Size enforcement: 4KB message cap, 8KB payload_summary cap, 64KB total cap
+- Vault token, JWT, lease ID, and URI patterns added to Redactor
+
+### Removed
+- `Legion::Logging::Hooks` module (`on_fatal`, `on_error`, `on_warn`, `enable_hooks!`, `disable_hooks!`, `clear_hooks!`)
+- Hooks replaced by `log_writer` and `exception_writer` lambdas
+
+### Changed
+- `AsyncWriter::LogEntry` uses `writer_context` field instead of `hook_context`
+- `runner_exception` now delegates to `log_exception` internally
+
 ## [1.3.5] - 2026-03-24
 
 ### Added

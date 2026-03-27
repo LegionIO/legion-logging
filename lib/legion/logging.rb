@@ -4,7 +4,6 @@ require 'legion/logging/version'
 require 'legion/logging/logger'
 require 'legion/logging/methods'
 require 'legion/logging/builder'
-require 'legion/logging/hooks'
 require 'legion/logging/event_builder'
 require 'legion/logging/async_writer'
 require 'legion/logging/helper'
@@ -19,14 +18,19 @@ module Legion
       include Legion::Logging::Methods
       include Legion::Logging::Builder
 
-      def on_fatal(&)  = Hooks.register(:fatal, &)
-      def on_error(&)  = Hooks.register(:error, &)
-      def on_warn(&)   = Hooks.register(:warn, &)
-      def enable_hooks!     = Hooks.enable!
-      def disable_hooks!    = Hooks.disable!
-      def clear_hooks!      = Hooks.clear!
-
       attr_reader :color
+      attr_writer :log_writer, :exception_writer
+
+      DEFAULT_LOG_WRITER       = ->(_event, routing_key:) {}
+      DEFAULT_EXCEPTION_WRITER = ->(_event, routing_key:, headers:, properties:) {}
+
+      def log_writer
+        @log_writer || DEFAULT_LOG_WRITER
+      end
+
+      def exception_writer
+        @exception_writer || DEFAULT_EXCEPTION_WRITER
+      end
 
       def setup(level: 'info', format: :text, async: true, **options)
         output(**options)

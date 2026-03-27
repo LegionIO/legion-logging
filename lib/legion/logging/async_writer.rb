@@ -3,7 +3,7 @@
 module Legion
   module Logging
     class AsyncWriter
-      LogEntry = ::Data.define(:level, :message, :hook_context)
+      LogEntry = ::Data.define(:level, :message, :writer_context)
       SHUTDOWN = :shutdown
 
       def initialize(logger, buffer_size: 10_000)
@@ -55,7 +55,7 @@ module Legion
 
       def write_entry(entry)
         @logger.send(entry.level, entry.message)
-        fire_hooks(entry) if entry.hook_context
+        fire_writer(entry) if entry.writer_context
       rescue StandardError => e
         warn("legion-log-writer error: #{e.message} (#{e.backtrace&.first})")
       end
@@ -69,11 +69,16 @@ module Legion
         nil
       end
 
-      def fire_hooks(entry)
-        ctx = entry.hook_context
-        Legion::Logging::Hooks.fire(ctx[:level], ctx[:event])
+      def fire_writer(entry)
+        ctx = entry.writer_context
+        event = ctx[:event]
+        level = ctx[:level]
+        lex_name = event[:lex] || 'core'
+        component = event.dig(:caller, :file).to_s[%r{/(runners|actors|transport|helpers|builders)/}, 1] || 'unknown'
+        routing_key = "legion.logging.log.#{level}.#{lex_name}.#{component}"
+        Legion::Logging.log_writer.call(event, routing_key: routing_key)
       rescue StandardError => e
-        warn("legion-log-writer hook error: #{e.message}")
+        warn("legion-log-writer writer error: #{e.message}")
       end
     end
   end
