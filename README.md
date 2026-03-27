@@ -2,7 +2,7 @@
 
 Logging module for the [LegionIO](https://github.com/LegionIO/LegionIO) framework. Provides colorized console output via Rainbow, structured JSON logging, multi-output IO, and a consistent logging interface across all Legion gems and extensions.
 
-**Version**: 1.3.2
+**Version**: 1.4.0
 
 ## Installation
 
@@ -93,6 +93,35 @@ class MyRunner
   end
 end
 ```
+
+### Exception Logging
+
+`log_exception` provides a single call for complete structured exception events with component context:
+
+```ruby
+Legion::Logging.log_exception(exception,
+  handled: true,
+  component_type: :runner,
+  lex: 'my_extension',
+  task_id: 'abc-123')
+```
+
+### Writer Lambdas
+
+`log_writer` and `exception_writer` are pluggable lambda slots that replace the old Hooks system. Assign them to forward events to external systems:
+
+```ruby
+Legion::Logging.exception_writer = ->(payload) { publish_to_amqp(payload) }
+Legion::Logging.log_writer = ->(context) { publish_log(context) }
+```
+
+### EventBuilder
+
+`EventBuilder.build_exception` constructs rich structured exception payloads including caller location, lex identity, and gem metadata. `EventBuilder.fingerprint` produces an MD5 fingerprint of stable error fields for deduplication in log aggregation pipelines.
+
+### Redactor
+
+`Legion::Logging::Redactor` redacts PII/PHI patterns (SSN, phone, MRN, DOB) plus Vault tokens, JWTs, bearer tokens, and lease IDs from log messages. Enabled opt-in via `logging.redaction.enabled: true`. Wired into all log methods in the write path.
 
 ## Requirements
 
