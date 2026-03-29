@@ -3,52 +3,49 @@
 module Legion
   module Logging
     module Hooks
+      @mutex       = Mutex.new
+      @warn_hooks  = []
+      @error_hooks = []
+      @fatal_hooks = []
+
       class << self
         def on_warn(&block)
-          warn_hooks << block
+          @mutex.synchronize { @warn_hooks << block }
         end
 
         def on_error(&block)
-          error_hooks << block
+          @mutex.synchronize { @error_hooks << block }
         end
 
         def on_fatal(&block)
-          fatal_hooks << block
+          @mutex.synchronize { @fatal_hooks << block }
         end
 
-        def fire(level, message, event = {})
-          hooks = case level
-                  when :warn  then warn_hooks
-                  when :error then error_hooks
-                  when :fatal then fatal_hooks
-                  else []
-                  end
-          hooks.map do |hook|
-            hook.call(message, event)
-          rescue StandardError => e
-            Kernel.warn("Legion::Logging::Hooks fire failed for level=#{level}: #{e.message}")
-            nil
+        def fire(level, message)
+          hooks = @mutex.synchronize do
+            case level
+            when :warn  then @warn_hooks.dup
+            when :error then @error_hooks.dup
+            when :fatal then @fatal_hooks.dup
+            else             []
+            end
           end
-        end
-
-        def clear_hooks!
-          @warn_hooks  = []
-          @error_hooks = []
-          @fatal_hooks = []
+          hooks.each do |hook|
+            hook.call(message)
+          rescue StandardError => e
+            Kernel.warn("Legion::Logging::Hooks fire error (level=#{level}): #{e.message}")
+          end
+          nil
         end
 
         private
 
-        def warn_hooks
-          @warn_hooks ||= []
-        end
-
-        def error_hooks
-          @error_hooks ||= []
-        end
-
-        def fatal_hooks
-          @fatal_hooks ||= []
+        def clear_hooks!
+          @mutex.synchronize do
+            @warn_hooks.clear
+            @error_hooks.clear
+            @fatal_hooks.clear
+          end
         end
       end
     end
