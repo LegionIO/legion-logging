@@ -61,6 +61,7 @@ module Legion
         else
           log.warn(message)
           fire_log_writer(:warn, raw)
+          Legion::Logging::Hooks.fire(:warn, raw) if defined?(Legion::Logging::Hooks)
         end
       end
 
@@ -78,6 +79,7 @@ module Legion
         else
           log.error(message)
           fire_log_writer(:error, raw)
+          Legion::Logging::Hooks.fire(:error, raw) if defined?(Legion::Logging::Hooks)
         end
       end
 
@@ -90,6 +92,7 @@ module Legion
         message = Rainbow(message).darkred if @color
         log.fatal(message)
         fire_log_writer(:fatal, raw)
+        Legion::Logging::Hooks.fire(:fatal, raw) if defined?(Legion::Logging::Hooks)
       end
 
       def unknown(message = nil)

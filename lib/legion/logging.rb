@@ -8,6 +8,7 @@ require 'legion/logging/event_builder'
 require 'legion/logging/async_writer'
 require 'legion/logging/helper'
 require 'legion/logging/category_registry'
+require 'legion/logging/hooks'
 
 require 'json'
 require 'logger'
