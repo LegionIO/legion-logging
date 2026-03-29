@@ -42,16 +42,16 @@ module Legion
         CategoryRegistry.registered_categories
       end
 
-      def on_fatal(&block)
-        Hooks.on_fatal(&block)
+      def on_fatal(&)
+        Hooks.on_fatal(&)
       end
 
-      def on_error(&block)
-        Hooks.on_error(&block)
+      def on_error(&)
+        Hooks.on_error(&)
       end
 
-      def on_warn(&block)
-        Hooks.on_warn(&block)
+      def on_warn(&)
+        Hooks.on_warn(&)
       end
 
       def enable_hooks!

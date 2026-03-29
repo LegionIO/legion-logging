@@ -5,7 +5,10 @@ require 'legion/logging/hooks'
 
 RSpec.describe Legion::Logging::Hooks do
   before { described_class.clear_hooks! }
-  after  { described_class.disable_hooks!; described_class.clear_hooks! }
+  after  do
+    described_class.disable_hooks!
+    described_class.clear_hooks!
+  end
 
   describe '.on_warn / .on_error / .on_fatal' do
     it 'registers a warn callback' do
