@@ -37,12 +37,17 @@ module Legion
         end
 
         def format_for_elk(event, index: 'legion')
-          {
+          result = {
             '@timestamp' => Time.now.utc.iso8601,
             'index'      => index,
             'message'    => redact_phi(event.to_s),
             'source'     => 'legion'
           }
+          if event.is_a?(Hash)
+            category = event[:category] || event['category']
+            result['category'] = category.to_s if category
+          end
+          result
         end
       end
     end

@@ -34,5 +34,27 @@ RSpec.describe Legion::Logging::SIEMExporter do
       result = described_class.format_for_elk('test', index: 'custom')
       expect(result['index']).to eq('custom')
     end
+
+    it 'includes category when event hash has symbol key :category' do
+      event = { message: 'security alert', category: 'security.finding' }
+      result = described_class.format_for_elk(event)
+      expect(result['category']).to eq('security.finding')
+    end
+
+    it 'includes category when event hash has string key "category"' do
+      event = { 'message' => 'access granted', 'category' => 'audit.access' }
+      result = described_class.format_for_elk(event)
+      expect(result['category']).to eq('audit.access')
+    end
+
+    it 'omits category key when event hash has no category' do
+      result = described_class.format_for_elk({ message: 'plain event' })
+      expect(result).not_to have_key('category')
+    end
+
+    it 'omits category key when event is a plain string' do
+      result = described_class.format_for_elk('plain string event')
+      expect(result).not_to have_key('category')
+    end
   end
 end

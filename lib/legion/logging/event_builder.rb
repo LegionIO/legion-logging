@@ -13,7 +13,7 @@ module Legion
       BACKTRACE_FALLBACK_FRAMES = 20
 
       class << self
-        def build(level:, message:, lex: nil, lex_segments: nil, context: nil, caller_offset: 2)
+        def build(level:, message:, lex: nil, lex_segments: nil, context: nil, category: nil, caller_offset: 2)
           event = base_fields(level, message)
           event[:lex] = derive_lex_source(lex, lex_segments)
           add_node(event)
@@ -21,6 +21,7 @@ module Legion
           add_exception_info(event, message)
           add_gem_info(event, event[:lex])
           event[:context] = context if context
+          event[:category] = category.to_s if category
           event.compact
         end
 

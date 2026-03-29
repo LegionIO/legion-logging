@@ -103,6 +103,28 @@ RSpec.describe Legion::Logging::EventBuilder do
       event = described_class.build(level: :error, message: "\e[31mred error\e[0m")
       expect(event[:message]).to eq('red error')
     end
+
+    it 'includes category when provided' do
+      event = described_class.build(level: :info, message: 'finding detected', category: 'security.finding')
+      expect(event[:category]).to eq('security.finding')
+    end
+
+    it 'includes category when provided as a symbol' do
+      event = described_class.build(level: :info, message: 'agent done', category: :'agent.execution')
+      expect(event[:category]).to eq('agent.execution')
+    end
+
+    it 'omits category key when category is nil' do
+      event = described_class.build(level: :info, message: 'no category')
+      expect(event).not_to have_key(:category)
+    end
+
+    it 'does not affect other fields when category is present' do
+      event = described_class.build(level: :warn, message: 'check this', category: 'net.connect')
+      expect(event[:level]).to eq(:warn)
+      expect(event[:message]).to eq('check this')
+      expect(event[:category]).to eq('net.connect')
+    end
   end
 
   describe '.build_exception' do
