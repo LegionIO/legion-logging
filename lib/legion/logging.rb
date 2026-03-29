@@ -8,6 +8,7 @@ require 'legion/logging/event_builder'
 require 'legion/logging/async_writer'
 require 'legion/logging/helper'
 require 'legion/logging/category_registry'
+require 'legion/logging/hooks'
 
 require 'json'
 require 'logger'
@@ -39,6 +40,30 @@ module Legion
 
       def registered_categories
         CategoryRegistry.registered_categories
+      end
+
+      def on_fatal(&block)
+        Hooks.on_fatal(&block)
+      end
+
+      def on_error(&block)
+        Hooks.on_error(&block)
+      end
+
+      def on_warn(&block)
+        Hooks.on_warn(&block)
+      end
+
+      def enable_hooks!
+        Hooks.enable_hooks!
+      end
+
+      def disable_hooks!
+        Hooks.disable_hooks!
+      end
+
+      def clear_hooks!
+        Hooks.clear_hooks!
       end
 
       def setup(level: 'info', format: :text, async: true, **options)

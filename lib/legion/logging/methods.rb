@@ -225,7 +225,9 @@ module Legion
       end
 
       def build_writer_context(level, message)
-        return nil if Legion::Logging.instance_variable_get(:@log_writer).nil?
+        has_writer = !Legion::Logging.instance_variable_get(:@log_writer).nil?
+        has_hooks = defined?(Legion::Logging::Hooks) && Legion::Logging::Hooks.enabled?
+        return nil unless has_writer || has_hooks
 
         lex_val  = instance_variable_defined?(:@lex) ? @lex : nil
         lex_segs = instance_variable_defined?(:@lex_segments) ? @lex_segments : nil
@@ -255,6 +257,7 @@ module Legion
         component = event.dig(:caller, :file).to_s[%r{/(runners|actors|transport|helpers|builders)/}, 1] || 'unknown'
         routing_key = "legion.logging.log.#{level}.#{lex_name}.#{component}"
         Legion::Logging.log_writer.call(event, routing_key: routing_key)
+        Legion::Logging::Hooks.fire(level, message, event) if defined?(Legion::Logging::Hooks)
       rescue StandardError => e
         if respond_to?(:log) && log.respond_to?(:warn)
           log.warn("fire_log_writer failed for level=#{level}, routing_key=#{routing_key}: #{e.class}: #{e.message}")
