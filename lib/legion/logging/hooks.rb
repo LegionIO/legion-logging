@@ -3,49 +3,68 @@
 module Legion
   module Logging
     module Hooks
-      @mutex       = Mutex.new
-      @warn_hooks  = []
-      @error_hooks = []
-      @fatal_hooks = []
-
       class << self
-        def on_warn(&block)
-          @mutex.synchronize { @warn_hooks << block }
+        def on_fatal(&block)
+          fatal_hooks << block
         end
 
         def on_error(&block)
-          @mutex.synchronize { @error_hooks << block }
+          error_hooks << block
         end
 
-        def on_fatal(&block)
-          @mutex.synchronize { @fatal_hooks << block }
+        def on_warn(&block)
+          warn_hooks << block
         end
 
-        def fire(level, message)
-          hooks = @mutex.synchronize do
-            case level
-            when :warn  then @warn_hooks.dup
-            when :error then @error_hooks.dup
-            when :fatal then @fatal_hooks.dup
-            else             []
-            end
-          end
-          hooks.each do |hook|
-            hook.call(message)
+        def fire(level, message, event)
+          return unless @enabled
+
+          hooks_for(level).each do |hook|
+            hook.call(message, event)
           rescue StandardError => e
-            Kernel.warn("Legion::Logging::Hooks fire error (level=#{level}): #{e.message}")
+            warn("Legion::Logging::Hooks#fire callback failed: #{e.message}")
           end
-          nil
+        end
+
+        def enable_hooks!
+          @enabled = true
+        end
+
+        def disable_hooks!
+          @enabled = false
+        end
+
+        def enabled?
+          @enabled || false
+        end
+
+        def clear_hooks!
+          @fatal_hooks = []
+          @error_hooks = []
+          @warn_hooks = []
         end
 
         private
 
-        def clear_hooks!
-          @mutex.synchronize do
-            @warn_hooks.clear
-            @error_hooks.clear
-            @fatal_hooks.clear
+        def hooks_for(level)
+          case level.to_sym
+          when :fatal then fatal_hooks
+          when :error then error_hooks
+          when :warn  then warn_hooks
+          else []
           end
+        end
+
+        def fatal_hooks
+          @fatal_hooks ||= []
+        end
+
+        def error_hooks
+          @error_hooks ||= []
+        end
+
+        def warn_hooks
+          @warn_hooks ||= []
         end
       end
     end

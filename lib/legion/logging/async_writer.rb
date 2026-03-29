@@ -77,6 +77,7 @@ module Legion
         component = event.dig(:caller, :file).to_s[%r{/(runners|actors|transport|helpers|builders)/}, 1] || 'unknown'
         routing_key = "legion.logging.log.#{level}.#{lex_name}.#{component}"
         Legion::Logging.log_writer.call(event, routing_key: routing_key)
+        Legion::Logging::Hooks.fire(level, entry.message, event) if defined?(Legion::Logging::Hooks)
       rescue StandardError => e
         warn("legion-log-writer writer error: #{e.message}")
       end
