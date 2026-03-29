@@ -92,4 +92,31 @@ RSpec.describe Legion::Logging do
     expect { Legion::Logging::Logger.new(level: nil) }.not_to raise_exception
     expect { Legion::Logging::Logger.new(level: 'fewlkjf') }.not_to raise_exception
   end
+
+  describe '.register_category' do
+    before { Legion::Logging::CategoryRegistry.clear! }
+
+    it 'registers a category via the top-level module' do
+      Legion::Logging.register_category('security.finding', description: 'Security findings')
+      expect(Legion::Logging::CategoryRegistry.category_registered?('security.finding')).to be true
+    end
+
+    it 'returns the registered name' do
+      result = Legion::Logging.register_category('agent.execution')
+      expect(result).to eq('agent.execution')
+    end
+  end
+
+  describe '.registered_categories' do
+    before { Legion::Logging::CategoryRegistry.clear! }
+
+    it 'returns an empty hash when nothing is registered' do
+      expect(Legion::Logging.registered_categories).to eq({})
+    end
+
+    it 'returns registered categories after registration' do
+      Legion::Logging.register_category('task.complete')
+      expect(Legion::Logging.registered_categories).to have_key('task.complete')
+    end
+  end
 end

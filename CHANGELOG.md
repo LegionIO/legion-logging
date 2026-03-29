@@ -1,5 +1,13 @@
 # Legion::Logging Changelog
 
+## [1.4.2] - 2026-03-28
+
+### Added
+- `Legion::Logging::CategoryRegistry` module: extension-defined event category registration with `register_category`, `registered_categories`, `category_registered?`, and `category_info` methods
+- `Legion::Logging.register_category` and `Legion::Logging.registered_categories` delegate methods on the top-level module
+- `category:` keyword argument on `EventBuilder.build` — emits `category` field in structured log events when provided
+- `SIEMExporter.format_for_elk` now includes `category` field when the event hash carries `:category` or `"category"`
+
 ## [1.4.1] - 2026-03-27
 
 ### Fixed

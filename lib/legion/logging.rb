@@ -7,6 +7,7 @@ require 'legion/logging/builder'
 require 'legion/logging/event_builder'
 require 'legion/logging/async_writer'
 require 'legion/logging/helper'
+require 'legion/logging/category_registry'
 
 require 'json'
 require 'logger'
@@ -30,6 +31,14 @@ module Legion
 
       def exception_writer
         @exception_writer || DEFAULT_EXCEPTION_WRITER
+      end
+
+      def register_category(name, description: nil, expected_fields: [])
+        CategoryRegistry.register_category(name, description: description, expected_fields: expected_fields)
+      end
+
+      def registered_categories
+        CategoryRegistry.registered_categories
       end
 
       def setup(level: 'info', format: :text, async: true, **options)
