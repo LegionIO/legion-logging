@@ -1,5 +1,46 @@
 # Legion::Logging Changelog
 
+## [1.4.3] - 2026-04-01
+
+### Added
+- `TaggedLogger` lightweight proxy: delegates to singleton for shared stdout/file/async output
+- `Helper#derive_log_segments` with class-level `SEGMENT_CACHE` — auto-derives `[llm][router]` from namespace
+- `Helper#with_log_context` for block-scoped method name thread-locals (`{dispatch}` in log output)
+- `Helper#handle_exception` with direct EventBuilder calls, per-line Rainbow coloring, structured AMQP publish
+- `Helper.current_log_method`, `.current_log_segments`, `.current_context` thread-local readers
+- `Legion::Logging::Settings` module with logger defaults
+- `COMPONENT_MAP` with 18 component types (runners, actors, hooks, absorbers, tools, adapters, middleware, etc.)
+- `EXCEPTION_COLORS` map for per-level exception coloring (bold first line, faint backtrace)
+- `Thread.current[:legion_context]` support for wire protocol fields (task_id, conversation_id, chain_id)
+- Redaction applied to exception stdout output when redaction is enabled
+- Method context (`legion_log_method`) included in structured exception events
+- `AsyncWriter::LogEntry` carries `segments` and `method_ctx` for thread-local propagation to writer thread
+- `Builder#resolve_lex_tag` and `#build_runner_trace` extracted from `text_format`
+
+### Changed
+- `Helper#log` returns `TaggedLogger` instead of `Logger.new` (shared output, one async thread)
+- `Helper#log_name`/`gem_name`/`gem_spec` replace `log_lex_name`/`lex_gem_name`/`gem_spec_for_lex` with multi-prefix resolution
+- `gem_name` and `gem_spec` memoized per instance
+- `COMPONENT_REGEX` in Methods expanded from 5 to 18 component types
+- `build_writer_context` reads `Thread.current[:legion_log_segments]` instead of stale `@lex_segments` ivar
+- `Builder#output` delegates to `set_log` (was parallel implementation)
+- `Builder#caller_locations` allocates single frame instead of full stack
+- Unknown log level strings default to INFO instead of DEBUG
+- `EventBuilder#legion_versions` and `#resolve_gem_spec` memoized
+- `EXCEPTION_PRIORITY` extracted to frozen constant in Methods (was inline hash allocation per call)
+- `text_format` and `json_format` in Builder read thread-locals for segments and method context
+
+### Fixed
+- `fire_log_writer` rescue no longer references undefined `routing_key` variable
+- Splunk auth header in `http_transport` — `apply_auth` receives actual URI instead of always evaluating against `URI('/')`
+- `TaggedLogger#initialize` accepts `**_opts` splat for unexpected settings keys
+- `TaggedLogger#trace` guards nil `size` to prevent `TypeError` on `caller_locations`
+
+### Removed
+- `TaggedLogger#runner_exception` (runner business logic, not logging concern)
+- `TaggedLogger#log_exception` (use `Helper#handle_exception` instead)
+- `Builder#log_level` no-op `@log = log` self-assignment
+
 ## [1.4.2] - 2026-03-28
 
 ### Added
