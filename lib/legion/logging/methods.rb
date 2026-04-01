@@ -5,6 +5,13 @@ require 'securerandom'
 module Legion
   module Logging
     module Methods
+      COMPONENT_REGEX = %r{
+        /(runners|actors|actor|helpers|hooks|absorbers|matchers|transport|
+        exchanges|queues|messages|data|builders|tools|adapters|engines|
+        formatters|parsers|middleware)/
+      }x
+      EXCEPTION_PRIORITY = { warn: 0, error: 5, fatal: 9 }.freeze
+
       def trace(raw_message = nil, size: @trace_size, log_caller: true)
         return unless @trace_enabled
 
@@ -219,7 +226,7 @@ module Legion
           timestamp:      Time.now.to_i,
           app_id:         'legionio',
           type:           'exception_event',
-          priority:       { warn: 0, error: 5, fatal: 9 }[level] || 5,
+          priority:       EXCEPTION_PRIORITY[level] || 5,
           delivery_mode:  2
         }
       end
@@ -230,7 +237,7 @@ module Legion
         return nil unless has_writer || has_hooks
 
         lex_val  = instance_variable_defined?(:@lex) ? @lex : nil
-        lex_segs = instance_variable_defined?(:@lex_segments) ? @lex_segments : nil
+        lex_segs = Thread.current[:legion_log_segments] || (instance_variable_defined?(:@lex_segments) ? @lex_segments : nil)
 
         event = Legion::Logging::EventBuilder.build(
           level:         level,
@@ -244,7 +251,7 @@ module Legion
 
       def fire_log_writer(level, message)
         lex_val  = instance_variable_defined?(:@lex) ? @lex : nil
-        lex_segs = instance_variable_defined?(:@lex_segments) ? @lex_segments : nil
+        lex_segs = Thread.current[:legion_log_segments] || (instance_variable_defined?(:@lex_segments) ? @lex_segments : nil)
 
         event = Legion::Logging::EventBuilder.build(
           level:         level,
@@ -254,14 +261,13 @@ module Legion
           caller_offset: 4
         )
         lex_name = event[:lex] || 'core'
-        component = event.dig(:caller, :file).to_s[%r{/(runners|actors|transport|helpers|builders)/}, 1] || 'unknown'
+        component = event.dig(:caller, :file).to_s[COMPONENT_REGEX, 1] || 'unknown'
         routing_key = "legion.logging.log.#{level}.#{lex_name}.#{component}"
         Legion::Logging.log_writer.call(event, routing_key: routing_key)
         Legion::Logging::Hooks.fire(level, message, event) if defined?(Legion::Logging::Hooks)
       rescue StandardError => e
-        if respond_to?(:log) && log.respond_to?(:warn)
-          log.warn("fire_log_writer failed for level=#{level}, routing_key=#{routing_key}: #{e.class}: #{e.message}")
-        end
+        rk = defined?(routing_key) ? routing_key : 'unknown'
+        log.warn("fire_log_writer failed for level=#{level}, routing_key=#{rk}: #{e.class}: #{e.message}") if respond_to?(:log) && log.respond_to?(:warn)
       end
     end
   end

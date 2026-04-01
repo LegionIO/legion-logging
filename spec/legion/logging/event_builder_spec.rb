@@ -4,6 +4,11 @@ require 'legion/logging'
 require 'legion/logging/event_builder'
 
 RSpec.describe Legion::Logging::EventBuilder do
+  before do
+    described_class.remove_instance_variable(:@gem_spec_cache) if described_class.instance_variable_defined?(:@gem_spec_cache)
+    described_class.remove_instance_variable(:@legion_versions) if described_class.instance_variable_defined?(:@legion_versions)
+  end
+
   describe '.build' do
     it 'includes required fields' do
       event = described_class.build(level: :fatal, message: 'something broke')

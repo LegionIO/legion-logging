@@ -74,7 +74,7 @@ module Legion
         event = ctx[:event]
         level = ctx[:level]
         lex_name = event[:lex] || 'core'
-        component = event.dig(:caller, :file).to_s[%r{/(runners|actors|transport|helpers|builders)/}, 1] || 'unknown'
+        component = event.dig(:caller, :file).to_s[Legion::Logging::Methods::COMPONENT_REGEX, 1] || 'unknown'
         routing_key = "legion.logging.log.#{level}.#{lex_name}.#{component}"
         Legion::Logging.log_writer.call(event, routing_key: routing_key)
         Legion::Logging::Hooks.fire(level, entry.message, event) if defined?(Legion::Logging::Hooks)

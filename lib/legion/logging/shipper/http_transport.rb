@@ -29,7 +29,7 @@ module Legion
           def post(uri, body)
             req = Net::HTTP::Post.new(uri)
             req['Content-Type'] = 'application/json'
-            apply_auth(req)
+            apply_auth(req, uri)
 
             Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == 'https',
                                                      open_timeout: 5, read_timeout: 10) do |http|
@@ -50,11 +50,11 @@ module Legion
             uri.path.include?('/services/collector')
           end
 
-          def apply_auth(req)
+          def apply_auth(req, uri)
             token = auth_token
             return unless token
 
-            req['Authorization'] = if splunk_hec?(URI(req.path.empty? ? '/' : req.uri&.to_s || '/'))
+            req['Authorization'] = if splunk_hec?(uri)
                                      "Splunk #{token}"
                                    else
                                      "Bearer #{token}"

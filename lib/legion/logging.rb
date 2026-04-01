@@ -1,11 +1,13 @@
 # frozen_string_literal: true
 
 require 'legion/logging/version'
+require 'legion/logging/settings'
 require 'legion/logging/logger'
 require 'legion/logging/methods'
 require 'legion/logging/builder'
 require 'legion/logging/event_builder'
 require 'legion/logging/async_writer'
+require 'legion/logging/tagged_logger'
 require 'legion/logging/helper'
 require 'legion/logging/category_registry'
 require 'legion/logging/hooks'
@@ -23,7 +25,7 @@ module Legion
       attr_reader :color
       attr_writer :log_writer, :exception_writer
 
-      DEFAULT_LOG_WRITER       = ->(_event, routing_key:) {}
+      DEFAULT_LOG_WRITER = ->(_event, routing_key:) {}
       DEFAULT_EXCEPTION_WRITER = ->(_event, routing_key:, headers:, properties:) {}
 
       def log_writer

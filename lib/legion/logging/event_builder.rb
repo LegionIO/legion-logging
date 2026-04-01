@@ -187,12 +187,16 @@ module Legion
         end
 
         def resolve_gem_spec(name)
+          return @gem_spec_cache[name] if defined?(@gem_spec_cache) && @gem_spec_cache.key?(name)
+
+          @gem_spec_cache ||= {}
           [name, "lex-#{name}", "legion-#{name}"].each do |candidate|
-            return Gem::Specification.find_by_name(candidate)
+            spec = Gem::Specification.find_by_name(candidate)
+            return @gem_spec_cache[name] = spec
           rescue Gem::MissingSpecError
             next
           end
-          nil
+          @gem_spec_cache[name] = nil
         end
 
         def strip_ansi(str)
@@ -254,9 +258,13 @@ module Legion
         end
 
         def legion_versions
-          Gem::Specification
-            .select { |s| s.name.start_with?('legion-', 'lex-') }
-            .to_h { |s| [s.name, s.version.to_s] }
+          @legion_versions ||= Gem::Specification
+                               .select { |s| s.name.start_with?('legion-', 'lex-') }
+                               .to_h do |s|
+            [s.name,
+             s.version.to_s]
+          end
+                                                                                        .freeze
         end
 
         def truncate_bytes(str, max)
