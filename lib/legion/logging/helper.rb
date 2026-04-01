@@ -7,6 +7,8 @@ module Legion
   module Logging
     module Helper
       SEGMENT_CACHE = {} # rubocop:disable Style/MutableConstant
+      SEGMENT_CACHE_MUTEX = Mutex.new
+      private_constant :SEGMENT_CACHE_MUTEX
       COMPONENT_MAP = {
         'runners'    => :runner,
         'actors'     => :actor,
@@ -98,7 +100,9 @@ module Legion
 
       def derive_log_segments
         key = respond_to?(:ancestors) ? ancestors.first : self.class
-        SEGMENT_CACHE[key] ||= begin
+        return SEGMENT_CACHE[key] if SEGMENT_CACHE.key?(key)
+
+        segments = begin
           parts = key.to_s.split('::')
           parts.shift if parts.first == 'Legion'
           parts.shift if parts.first == 'Extensions'
@@ -109,6 +113,8 @@ module Legion
           end
           parts.freeze
         end
+
+        SEGMENT_CACHE_MUTEX.synchronize { SEGMENT_CACHE[key] ||= segments }
       end
 
       def derive_component_type

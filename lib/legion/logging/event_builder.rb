@@ -12,6 +12,9 @@ module Legion
       MAX_TOTAL_BYTES          = 65_536
       BACKTRACE_FALLBACK_FRAMES = 20
 
+      GEM_SPEC_CACHE_MUTEX = Mutex.new
+      private_constant :GEM_SPEC_CACHE_MUTEX
+
       class << self
         def build(level:, message:, lex: nil, lex_segments: nil, context: nil, category: nil, caller_offset: 2)
           event = base_fields(level, message)
@@ -187,16 +190,18 @@ module Legion
         end
 
         def resolve_gem_spec(name)
-          return @gem_spec_cache[name] if defined?(@gem_spec_cache) && @gem_spec_cache.key?(name)
+          cache = (@gem_spec_cache ||= {})
+          return cache[name] if cache.key?(name)
 
-          @gem_spec_cache ||= {}
+          spec = nil
           [name, "lex-#{name}", "legion-#{name}"].each do |candidate|
             spec = Gem::Specification.find_by_name(candidate)
-            return @gem_spec_cache[name] = spec
+            break
           rescue Gem::MissingSpecError
             next
           end
-          @gem_spec_cache[name] = nil
+
+          GEM_SPEC_CACHE_MUTEX.synchronize { cache[name] ||= spec }
         end
 
         def strip_ansi(str)

@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative 'methods'
+
 module Legion
   module Logging
     class AsyncWriter
