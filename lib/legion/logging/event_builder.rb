@@ -201,7 +201,7 @@ module Legion
             next
           end
 
-          GEM_SPEC_CACHE_MUTEX.synchronize { cache[name] ||= spec }
+          GEM_SPEC_CACHE_MUTEX.synchronize { cache[name] = spec }
         end
 
         def strip_ansi(str)
