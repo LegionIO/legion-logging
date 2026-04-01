@@ -194,7 +194,7 @@ module Legion
           return cache[name] if cache.key?(name)
 
           spec = nil
-          [name, "lex-#{name}", "legion-#{name}"].each do |candidate|
+          ["lex-#{name}", "legion-#{name}", name].each do |candidate|
             spec = Gem::Specification.find_by_name(candidate)
             break
           rescue Gem::MissingSpecError

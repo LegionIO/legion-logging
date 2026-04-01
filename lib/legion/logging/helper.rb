@@ -54,7 +54,7 @@ module Legion
       end
 
       def log
-        @log ||= Legion::Logging::TaggedLogger.new(segments: derive_log_segments, **settings[:logger])
+        @log ||= Legion::Logging::TaggedLogger.new(segments: derive_log_segments, **resolve_logger_settings)
       end
 
       def with_log_context(method_name)
@@ -175,6 +175,14 @@ module Legion
         return Legion::Settings[:logging] if defined?(Legion::Settings) && Legion::Settings[:logging].is_a?(Hash)
 
         Legion::Logging::Settings.default
+      end
+
+      def resolve_logger_settings
+        s = settings
+        return Legion::Logging::Settings.default unless s.is_a?(Hash)
+
+        raw = s[:logger]
+        raw.is_a?(Hash) ? raw : Legion::Logging::Settings.default
       end
 
       # -- Exception stdout/file output --
