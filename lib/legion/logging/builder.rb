@@ -27,6 +27,10 @@ module Legion
             thread:    Thread.current.object_id
           }
           entry[:pid] = ::Process.pid if include_pid
+          segments = Thread.current[:legion_log_segments]
+          entry[:segments] = segments if segments
+          method_ctx = Thread.current[:legion_log_method]
+          entry[:method] = method_ctx if method_ctx
           "#{::JSON.generate(entry)}\n"
         rescue StandardError => e
           warn("Legion::Logging::Builder#json_format formatter failed: #{e.message}")
@@ -36,24 +40,12 @@ module Legion
 
       def text_format(include_pid: false, **options)
         log.formatter = proc do |severity, datetime, _progname, msg|
-          options[:lex_name] = if options.key?(:lex_segments)
-                                 options[:lex_segments].map { |s| "[#{s}]" }.join
-                               elsif options.key?(:lex) && !options[:lex].nil?
-                                 "[#{options[:lex]}]"
-                               end
-          unless options[:lex_name].nil?
-            loc  = caller_locations[4]
-            path = loc.to_s.split('/').last(2)
-            runner_trace = {
-              type:        path[0],
-              file:        File.basename(loc.path, '.*'),
-              function:    loc.base_label,
-              line_number: loc.lineno
-            }
-          end
+          lex_name = resolve_lex_tag(options)
+          runner_trace = build_runner_trace if lex_name
+
           string = "[#{datetime}]"
           string.concat("[#{::Process.pid}]") if include_pid
-          string.concat(options[:lex_name]) unless options[:lex_name].nil?
+          string.concat(lex_name) if lex_name
           if runner_trace.is_a?(Hash) && (options[:extended] || severity == 'debug')
             string.concat("[#{runner_trace[:type]}:#{runner_trace[:file]}:#{runner_trace[:function]}:#{runner_trace[:line_number]}]")
           end
@@ -62,17 +54,36 @@ module Legion
         end
       end
 
+      def resolve_lex_tag(options)
+        segments = Thread.current[:legion_log_segments]
+        tag = if segments
+                segments.map { |s| "[#{s}]" }.join
+              elsif options.key?(:lex_segments)
+                options[:lex_segments].map { |s| "[#{s}]" }.join
+              elsif options.key?(:lex) && !options[:lex].nil?
+                "[#{options[:lex]}]"
+              end
+
+        method_ctx = Thread.current[:legion_log_method]
+        tag = "#{tag}{#{method_ctx}}" if tag && method_ctx
+        tag
+      end
+
+      def build_runner_trace
+        loc = caller_locations(6, 1)&.first
+        return unless loc
+
+        path = loc.to_s.split('/').last(2)
+        {
+          type:        path[0],
+          file:        File.basename(loc.path, '.*'),
+          function:    loc.base_label,
+          line_number: loc.lineno
+        }
+      end
+
       def output(**options)
-        if options[:log_file] && options[:log_stdout] != false
-          path = prepare_log_path(options[:log_file])
-          require_relative 'multi_io'
-          io = MultiIO.new($stdout, File.open(path, 'a'))
-          @log = ::Logger.new(io)
-        elsif options[:log_file]
-          @log = ::Logger.new(prepare_log_path(options[:log_file]))
-        else
-          @log = ::Logger.new($stdout)
-        end
+        set_log(logfile: options[:log_file], log_stdout: options[:log_stdout])
       end
 
       def log
@@ -120,10 +131,9 @@ module Legion
                       if level.is_a? Integer
                         level
                       else
-                        0
+                        1
                       end
                     end
-        @log = log
       end
 
       def async?
