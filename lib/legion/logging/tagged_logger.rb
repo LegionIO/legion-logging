@@ -9,7 +9,12 @@ module Legion
 
       def initialize(segments:, level: :info, trace: false, trace_size: 4, extended: false, **_opts)
         @segments = segments
-        @level_value = LEVELS.fetch(level.to_s.downcase.to_sym, 1)
+        @level_value =
+          if level.is_a?(Integer)
+            level
+          else
+            LEVELS.fetch(level.to_s.downcase.to_sym, LEVELS[:info])
+          end
         @trace_enabled = trace
         @trace_size = trace_size
         @extended = extended

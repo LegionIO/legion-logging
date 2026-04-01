@@ -58,8 +58,8 @@ module Legion
       def write_entry(entry)
         prev_segments   = Thread.current[:legion_log_segments]
         prev_method_ctx = Thread.current[:legion_log_method]
-        Thread.current[:legion_log_segments] = entry.segments   if entry.segments
-        Thread.current[:legion_log_method]   = entry.method_ctx if entry.method_ctx
+        Thread.current[:legion_log_segments] = entry.segments
+        Thread.current[:legion_log_method]   = entry.method_ctx
         @logger.send(entry.level, entry.message)
         fire_writer(entry) if entry.writer_context
       rescue StandardError => e
