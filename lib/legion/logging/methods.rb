@@ -34,7 +34,11 @@ module Legion
         message = Rainbow(message).blue if @color
         writer = @async_writer
         if writer&.alive?
-          writer.push(AsyncWriter::LogEntry.new(level: :debug, message: message, writer_context: nil))
+          writer.push(AsyncWriter::LogEntry.new(
+                        level: :debug, message: message, writer_context: nil,
+                        segments: Thread.current[:legion_log_segments],
+                        method_ctx: Thread.current[:legion_log_method]
+                      ))
         else
           log.debug(message)
         end
@@ -48,7 +52,11 @@ module Legion
         message = Rainbow(message).green if @color
         writer = @async_writer
         if writer&.alive?
-          writer.push(AsyncWriter::LogEntry.new(level: :info, message: message, writer_context: nil))
+          writer.push(AsyncWriter::LogEntry.new(
+                        level: :info, message: message, writer_context: nil,
+                        segments: Thread.current[:legion_log_segments],
+                        method_ctx: Thread.current[:legion_log_method]
+                      ))
         else
           log.info(message)
         end
@@ -64,7 +72,11 @@ module Legion
         writer = @async_writer
         if writer&.alive?
           ctx = build_writer_context(:warn, raw)
-          writer.push(AsyncWriter::LogEntry.new(level: :warn, message: message, writer_context: ctx))
+          writer.push(AsyncWriter::LogEntry.new(
+                        level: :warn, message: message, writer_context: ctx,
+                        segments: Thread.current[:legion_log_segments],
+                        method_ctx: Thread.current[:legion_log_method]
+                      ))
         else
           log.warn(message)
           fire_log_writer(:warn, raw)
@@ -81,7 +93,11 @@ module Legion
         writer = @async_writer
         if writer&.alive?
           ctx = build_writer_context(:error, raw)
-          writer.push(AsyncWriter::LogEntry.new(level: :error, message: message, writer_context: ctx))
+          writer.push(AsyncWriter::LogEntry.new(
+                        level: :error, message: message, writer_context: ctx,
+                        segments: Thread.current[:legion_log_segments],
+                        method_ctx: Thread.current[:legion_log_method]
+                      ))
         else
           log.error(message)
           fire_log_writer(:error, raw)
@@ -105,7 +121,11 @@ module Legion
         message = Rainbow(message).purple if @color
         writer = @async_writer
         if writer&.alive?
-          writer.push(AsyncWriter::LogEntry.new(level: :unknown, message: message, writer_context: nil))
+          writer.push(AsyncWriter::LogEntry.new(
+                        level: :unknown, message: message, writer_context: nil,
+                        segments: Thread.current[:legion_log_segments],
+                        method_ctx: Thread.current[:legion_log_method]
+                      ))
         else
           log.unknown(message)
         end

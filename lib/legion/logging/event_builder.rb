@@ -264,7 +264,7 @@ module Legion
             [s.name,
              s.version.to_s]
           end
-                                                                                        .freeze
+                               .freeze
         end
 
         def truncate_bytes(str, max)

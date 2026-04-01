@@ -3,7 +3,7 @@
 module Legion
   module Logging
     class AsyncWriter
-      LogEntry = ::Data.define(:level, :message, :writer_context)
+      LogEntry = ::Data.define(:level, :message, :writer_context, :segments, :method_ctx)
       SHUTDOWN = :shutdown
 
       def initialize(logger, buffer_size: 10_000)
@@ -54,10 +54,17 @@ module Legion
       end
 
       def write_entry(entry)
+        prev_segments   = Thread.current[:legion_log_segments]
+        prev_method_ctx = Thread.current[:legion_log_method]
+        Thread.current[:legion_log_segments] = entry.segments   if entry.segments
+        Thread.current[:legion_log_method]   = entry.method_ctx if entry.method_ctx
         @logger.send(entry.level, entry.message)
         fire_writer(entry) if entry.writer_context
       rescue StandardError => e
         warn("legion-log-writer error: #{e.message} (#{e.backtrace&.first})")
+      ensure
+        Thread.current[:legion_log_segments] = prev_segments
+        Thread.current[:legion_log_method]   = prev_method_ctx
       end
 
       def drain

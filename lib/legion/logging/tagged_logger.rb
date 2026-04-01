@@ -65,7 +65,7 @@ module Legion
         raw_message = yield if raw_message.nil? && block_given?
         message = "Tracing: #{raw_message} "
         if log_caller
-          frames = size ? caller_locations(1, size) : caller_locations(1)
+          frames = size ? caller_locations(2, size) : caller_locations(2)
           message.concat(frames&.join(', ').to_s)
         end
         with_segments { Legion::Logging.unknown(message) }
