@@ -33,6 +33,38 @@ RSpec.describe Legion::Logging::AsyncWriter do
       subject.start
       expect(subject.instance_variable_get(:@thread)).to equal(thread)
     end
+
+    it 'times out instead of deadlocking when shutdown cannot finish promptly' do
+      gate = Queue.new
+      slow_writer_class = Class.new(described_class) do
+        def initialize(logger, gate:, **)
+          @gate = gate
+          super(logger, **)
+        end
+
+        private
+
+        def consume
+          @gate.pop
+          super
+        end
+      end
+
+      writer = slow_writer_class.new(logger, gate: gate, buffer_size: 1)
+      writer.start
+      writer.push(Legion::Logging::AsyncWriter::LogEntry.new(
+                    level: :info, message: 'blocked', writer_context: nil, segments: nil, method_ctx: nil,
+                    caller_trace: nil
+                  ))
+
+      start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      expect(writer.stop(timeout: 0.01)).to be(false)
+      elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time
+      expect(elapsed).to be < 0.2
+
+      gate << true
+      expect(writer.stop(timeout: 1)).to be(true)
+    end
   end
 
   describe '#push' do
@@ -233,7 +265,13 @@ RSpec.describe 'async routing through Methods' do
   end
 
   it 'falls back to sync when the async writer rejects a queued entry' do
-    writer = instance_double(Legion::Logging::AsyncWriter, alive?: true, push: false, stop: true)
+    writer = instance_double(
+      Legion::Logging::AsyncWriter,
+      alive?: true,
+      push:   false,
+      stop:   true,
+      logger: Legion::Logging.log
+    )
     Legion::Logging.instance_variable_set(:@async_writer, writer)
     Legion::Logging.instance_variable_set(:@async, true)
 

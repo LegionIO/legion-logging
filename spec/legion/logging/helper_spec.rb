@@ -554,4 +554,16 @@ RSpec.describe Legion::Logging::Helper do
       expect(obj.send(:resolve_logger_settings)).to eq(expected)
     end
   end
+
+  describe 'TaggedLogger defaults' do
+    it 'matches Legion::Logging::Settings.default for direct instantiation' do
+      logger = Legion::Logging::TaggedLogger.new(segments: %w[direct])
+      defaults = Legion::Logging::Settings.default
+
+      expect(logger.level).to eq(Legion::Logging::TaggedLogger::LEVELS.fetch(defaults[:level]))
+      expect(logger.trace_enabled).to be(defaults[:trace])
+      expect(logger.extended).to be(defaults[:extended])
+      expect(logger.instance_variable_get(:@trace_size)).to eq(defaults[:trace_size])
+    end
+  end
 end

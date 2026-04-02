@@ -8,8 +8,11 @@ module Legion
       LogEntry = ::Data.define(:level, :message, :writer_context, :segments, :method_ctx, :caller_trace)
       SHUTDOWN = :shutdown
 
+      attr_reader :logger
+
       def initialize(logger, buffer_size: 10_000)
         @logger = logger
+        @buffer_size = buffer_size
         @queue  = SizedQueue.new(buffer_size)
         @thread = nil
         @state_mutex = Mutex.new
@@ -21,13 +24,14 @@ module Legion
 
         @state_mutex.synchronize { @accepting = true }
         drain
+        @queue = SizedQueue.new(@buffer_size)
         @thread = Thread.new { consume }
         @thread.name = 'legion-log-writer'
         @thread.abort_on_exception = false
       end
 
       # rubocop:disable Naming/PredicateMethod
-      def stop(timeout: nil)
+      def stop(timeout: 2)
         @state_mutex.synchronize { @accepting = false }
 
         unless @thread&.alive?
@@ -36,7 +40,7 @@ module Legion
           return true
         end
 
-        @queue.push(SHUTDOWN)
+        @queue.close
         timeout ? @thread.join(timeout) : @thread.join
         return false if @thread&.alive?
 
@@ -49,6 +53,8 @@ module Legion
 
         @queue.push(entry)
         true
+      rescue ClosedQueueError
+        false
       end
       # rubocop:enable Naming/PredicateMethod
 
@@ -61,7 +67,7 @@ module Legion
       def consume
         loop do
           entry = @queue.pop
-          break if entry == SHUTDOWN
+          break if entry.nil? || entry == SHUTDOWN
 
           write_entry(entry)
         end

@@ -7,13 +7,21 @@ module Legion
 
       attr_reader :segments, :trace_enabled, :extended
 
-      def initialize(segments:, level: :error, trace: true, trace_size: 4, extended: true, **_opts)
+      def initialize(
+        segments:,
+        level: Legion::Logging::Settings.default[:level],
+        trace: Legion::Logging::Settings.default[:trace],
+        trace_size: Legion::Logging::Settings.default[:trace_size],
+        extended: Legion::Logging::Settings.default[:extended],
+        **_opts
+      )
         @segments = segments
         @level_value =
           if level.is_a?(Integer)
             level
           else
-            LEVELS.fetch(level.to_s.downcase.to_sym, LEVELS[:debug])
+            default_level = Legion::Logging::Settings.default[:level].to_s.downcase.to_sym
+            LEVELS.fetch(level.to_s.downcase.to_sym, LEVELS.fetch(default_level, LEVELS[:info]))
           end
         @trace_enabled = trace
         @trace_size = trace_size

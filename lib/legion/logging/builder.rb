@@ -90,6 +90,8 @@ module Legion
       end
 
       def set_log(logfile: nil, log_stdout: nil, **)
+        previous_log = @log
+
         if logfile && log_stdout != false
           path = prepare_log_path(logfile)
           require_relative 'multi_io'
@@ -104,6 +106,9 @@ module Legion
         else
           @log = ::Logger.new($stdout)
         end
+
+        close_replaced_log(previous_log)
+        @log
       end
 
       def prepare_log_path(path)
@@ -143,19 +148,41 @@ module Legion
         (@async == true && @async_writer&.alive?) || false
       end
 
+      # rubocop:disable Naming/PredicateMethod
       def start_async_writer(buffer_size: 10_000)
         require_relative 'async_writer'
-        stop_async_writer if @async_writer&.alive?
+        return false if @async_writer&.alive? && stop_async_writer == false
+
         @async_writer = AsyncWriter.new(log, buffer_size: buffer_size)
         @async_writer.start
         @async = true
+        true
       end
 
       def stop_async_writer
         writer = @async_writer
-        writer&.stop
+        stopped = writer&.stop
+        return false if stopped == false
+
+        close_replaced_log(writer.logger) if writer.respond_to?(:logger)
         @async_writer = nil if @async_writer.equal?(writer)
         @async = false
+        true
+      end
+      # rubocop:enable Naming/PredicateMethod
+
+      private
+
+      def close_replaced_log(logger)
+        return unless logger
+        return if logger.equal?(@log)
+        return if @async_writer&.alive? && @async_writer.respond_to?(:logger) && @async_writer.logger.equal?(logger)
+
+        log_device = logger.instance_variable_get(:@logdev)
+        dev = log_device&.dev
+        return if dev.nil? || [$stdout, $stderr].include?(dev)
+
+        dev.close if dev.respond_to?(:close)
       end
     end
   end
