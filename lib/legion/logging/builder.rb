@@ -113,7 +113,7 @@ module Legion
         log.level
       end
 
-      def log_level(level = 'info')
+      def log_level(level = 'debug')
         log.level = case level
                     when 'trace', 'debug'
                       ::Logger::DEBUG
