@@ -11,6 +11,29 @@ module Legion
       MAX_PAYLOAD_BYTES        = 8192
       MAX_TOTAL_BYTES          = 65_536
       BACKTRACE_FALLBACK_FRAMES = 20
+      MIN_TRUNCATED_FIELD_BYTES = 256
+
+      CORE_EXCEPTION_FIELDS = %i[
+        timestamp
+        level
+        exception_class
+        message
+        caller_file
+        caller_line
+        caller_function
+        lex
+        component_type
+        gem_name
+        lex_version
+        handled
+        pid
+        thread
+        task_id
+        conversation_id
+        user
+        error_fingerprint
+        node
+      ].freeze
 
       GEM_SPEC_CACHE_MUTEX = Mutex.new
       private_constant :GEM_SPEC_CACHE_MUTEX
@@ -310,6 +333,56 @@ module Legion
           return if safe_json_bytesize(event) <= MAX_TOTAL_BYTES
 
           event[:message] = truncate_bytes(event[:message].to_s, 1024)
+          trim_optional_fields!(event)
+          hard_cap_message!(event)
+        end
+
+        def trim_optional_fields!(event)
+          while safe_json_bytesize(event) > MAX_TOTAL_BYTES
+            key = largest_optional_field(event)
+            break unless key
+
+            reduced = reduce_field(event[key])
+            if reduced.nil?
+              event.delete(key)
+            else
+              event[key] = reduced
+            end
+          end
+        end
+
+        def largest_optional_field(event)
+          event.each_key
+               .reject { |key| CORE_EXCEPTION_FIELDS.include?(key) }
+               .max_by { |key| safe_json_bytesize(event[key]) }
+        end
+
+        def reduce_field(value)
+          case value
+          when String
+            return nil if value.bytesize <= MIN_TRUNCATED_FIELD_BYTES
+
+            truncate_bytes(value, [value.bytesize / 2, MIN_TRUNCATED_FIELD_BYTES].max)
+          when Array
+            return nil if value.size <= 1
+
+            value.first([value.size / 2, 1].max)
+          when Hash
+            return nil if value.size <= 1
+
+            value.first([value.size / 2, 1].max).to_h
+          end
+        end
+
+        def hard_cap_message!(event)
+          return if safe_json_bytesize(event) <= MAX_TOTAL_BYTES
+
+          event[:message] = truncate_bytes(event[:message].to_s, MIN_TRUNCATED_FIELD_BYTES)
+          return if safe_json_bytesize(event) <= MAX_TOTAL_BYTES
+
+          message_overhead = safe_json_bytesize(event.merge(message: ''))
+          available = MAX_TOTAL_BYTES - message_overhead
+          event[:message] = truncate_bytes(event[:message].to_s, [available, 0].max)
         end
       end
     end

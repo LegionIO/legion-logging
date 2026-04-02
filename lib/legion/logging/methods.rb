@@ -30,78 +30,36 @@ module Legion
         return unless log.level < 1
 
         message = yield if message.nil? && block_given?
-        message = maybe_redact(message)
-        message = Rainbow(message).blue if @color
-        writer = @async_writer
-        if writer&.alive?
-          writer.push(AsyncWriter::LogEntry.new(
-                        level: :debug, message: message, writer_context: nil,
-                        segments: Thread.current[:legion_log_segments],
-                        method_ctx: Thread.current[:legion_log_method]
-                      ))
-        else
-          log.debug(message)
-        end
+        raw = maybe_redact(message)
+        formatted = format_message_for_level(:debug, raw)
+        write_async_or_sync(:debug, formatted, raw)
       end
 
       def info(message = nil)
         return unless log.level < 2
 
         message = yield if message.nil? && block_given?
-        message = maybe_redact(message)
-        message = Rainbow(message).green if @color
-        writer = @async_writer
-        if writer&.alive?
-          writer.push(AsyncWriter::LogEntry.new(
-                        level: :info, message: message, writer_context: nil,
-                        segments: Thread.current[:legion_log_segments],
-                        method_ctx: Thread.current[:legion_log_method]
-                      ))
-        else
-          log.info(message)
-        end
+        raw = maybe_redact(message)
+        formatted = format_message_for_level(:info, raw)
+        write_async_or_sync(:info, formatted, raw)
       end
 
       def warn(message = nil)
         return unless log.level < 3
 
         message = yield if message.nil? && block_given?
-        message = maybe_redact(message)
-        raw = message
-        message = Rainbow(message).yellow if @color
-        writer = @async_writer
-        if writer&.alive?
-          ctx = build_writer_context(:warn, raw)
-          writer.push(AsyncWriter::LogEntry.new(
-                        level: :warn, message: message, writer_context: ctx,
-                        segments: Thread.current[:legion_log_segments],
-                        method_ctx: Thread.current[:legion_log_method]
-                      ))
-        else
-          log.warn(message)
-          fire_log_writer(:warn, raw)
-        end
+        raw = maybe_redact(message)
+        formatted = format_message_for_level(:warn, raw)
+        write_async_or_sync(:warn, formatted, raw, writer_context: build_writer_context(:warn, raw))
       end
 
       def error(message = nil)
         return unless log.level < 4
 
         message = yield if message.nil? && block_given?
-        message = maybe_redact(message)
-        raw = message
-        message = Rainbow(message).red if @color
-        writer = @async_writer
-        if writer&.alive?
-          ctx = build_writer_context(:error, raw)
-          writer.push(AsyncWriter::LogEntry.new(
-                        level: :error, message: message, writer_context: ctx,
-                        segments: Thread.current[:legion_log_segments],
-                        method_ctx: Thread.current[:legion_log_method]
-                      ))
-        else
-          log.error(message)
-          fire_log_writer(:error, raw)
-        end
+        raw = maybe_redact(message)
+        formatted = format_message_for_level(:error, raw)
+        write_async_or_sync(:error, formatted, raw, writer_context: build_writer_context(:error, raw))
       end
 
       def fatal(message = nil)
@@ -117,17 +75,22 @@ module Legion
 
       def unknown(message = nil)
         message = yield if message.nil? && block_given?
-        message = maybe_redact(message)
-        message = Rainbow(message).purple if @color
-        writer = @async_writer
-        if writer&.alive?
-          writer.push(AsyncWriter::LogEntry.new(
-                        level: :unknown, message: message, writer_context: nil,
-                        segments: Thread.current[:legion_log_segments],
-                        method_ctx: Thread.current[:legion_log_method]
-                      ))
-        else
-          log.unknown(message)
+        raw = maybe_redact(message)
+        formatted = format_message_for_level(:unknown, raw)
+        write_async_or_sync(:unknown, formatted, raw)
+      end
+
+      def emit_tagged(level, message = nil, segments: nil, method_ctx: nil)
+        level = level.to_sym
+        message = yield if message.nil? && block_given?
+        return if message.nil?
+
+        raw = maybe_redact(message)
+        formatted = format_message_for_level(level, raw)
+
+        with_tagged_context(segments, method_ctx) do
+          write_forced(level, formatted)
+          fire_log_writer(level, raw) if %i[warn error fatal].include?(level)
         end
       end
 
@@ -143,6 +106,7 @@ module Legion
         level = level.to_sym if level.respond_to?(:to_sym)
         # 1. Log human-readable line to stdout/file (bypass writer callbacks)
         msg = exception.respond_to?(:message) ? exception.message : exception.to_s
+        msg = maybe_redact(msg)
         log.public_send(level, msg) if respond_to?(:log) && log.respond_to?(level)
 
         # 2. Build rich exception event
@@ -193,6 +157,81 @@ module Legion
         Legion::Logging::Redactor.redact_string(message)
       rescue StandardError
         message
+      end
+
+      def format_message_for_level(level, message)
+        return Rainbow(message).blue if level == :debug && @color
+        return Rainbow(message).green if level == :info && @color
+        return Rainbow(message).yellow if level == :warn && @color
+        return Rainbow(message).red if level == :error && @color
+        return Rainbow(message).darkred if level == :fatal && @color
+        return Rainbow(message).purple if level == :unknown && @color
+
+        message
+      end
+
+      def with_tagged_context(segments, method_ctx)
+        prev_segments = Thread.current[:legion_log_segments]
+        prev_method_ctx = Thread.current[:legion_log_method]
+
+        Thread.current[:legion_log_segments] = segments unless segments.nil?
+        Thread.current[:legion_log_method] = method_ctx unless method_ctx.nil?
+        yield
+      ensure
+        Thread.current[:legion_log_segments] = prev_segments
+        Thread.current[:legion_log_method] = prev_method_ctx
+      end
+
+      def write_forced(level, message)
+        logger = log
+        formatter = logger.formatter || ::Logger::Formatter.new
+        rendered = formatter.call(severity_label_for(level), Time.now, nil, message)
+
+        log_device = logger.instance_variable_get(:@logdev)
+        if log_device.respond_to?(:write)
+          log_device.write(rendered)
+        else
+          $stdout.write(rendered)
+        end
+      end
+
+      def severity_label_for(level)
+        return 'ANY' if level == :unknown
+
+        level.to_s.upcase
+      end
+
+      def write_async_or_sync(level, formatted_message, raw_message, writer_context: nil)
+        writer = @async_writer
+        caller_trace = capture_runner_trace_for_async
+        if writer&.alive?
+          queued = writer.push(AsyncWriter::LogEntry.new(
+                                 level:          level,
+                                 message:        formatted_message,
+                                 writer_context: writer_context,
+                                 segments:       Thread.current[:legion_log_segments],
+                                 method_ctx:     Thread.current[:legion_log_method],
+                                 caller_trace:   caller_trace
+                               ))
+          return if queued
+        end
+
+        with_caller_trace(caller_trace) do
+          log.public_send(level, formatted_message)
+          fire_log_writer(level, raw_message) if writer_context
+        end
+      end
+
+      def capture_runner_trace_for_async
+        build_runner_trace(caller_locations(4, 1)&.first)
+      end
+
+      def with_caller_trace(caller_trace)
+        prev_caller_trace = Thread.current[:legion_log_caller]
+        Thread.current[:legion_log_caller] = caller_trace
+        yield
+      ensure
+        Thread.current[:legion_log_caller] = prev_caller_trace
       end
 
       def redaction_enabled?

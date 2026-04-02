@@ -272,6 +272,30 @@ RSpec.describe Legion::Logging::EventBuilder do
                                               payload_summary: large_payload)
       expect(event[:payload_summary].bytesize).to be <= Legion::Logging::EventBuilder::MAX_PAYLOAD_BYTES
     end
+
+    it 'enforces the total size cap when arbitrary extra fields are huge' do
+      event = described_class.build_exception(
+        exception:  exception,
+        level:      :error,
+        extra_blob: { huge: 'z' * 200_000 },
+        extra_note: 'n' * 20_000
+      )
+
+      expect(JSON.generate(event).bytesize).to be <= described_class::MAX_TOTAL_BYTES
+    end
+
+    it 'retains core exception fields while trimming oversized optional fields' do
+      event = described_class.build_exception(
+        exception:  exception,
+        level:      :error,
+        extra_blob: { huge: 'z' * 200_000 }
+      )
+
+      expect(event[:exception_class]).to eq('RuntimeError')
+      expect(event[:message]).to be_a(String)
+      expect(event[:error_fingerprint]).to match(/\A[0-9a-f]{32}\z/)
+      expect(JSON.generate(event).bytesize).to be <= described_class::MAX_TOTAL_BYTES
+    end
   end
 
   describe '.fingerprint' do

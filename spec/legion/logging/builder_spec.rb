@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
+require 'tmpdir'
 
 RSpec.describe Legion::Logging::Builder do
   describe '#text_format with lex_segments:' do
@@ -44,6 +45,31 @@ RSpec.describe Legion::Logging::Builder do
     it 'defaults async to true' do
       Legion::Logging.setup(level: 'info')
       expect(Legion::Logging.async?).to be true
+    end
+
+    it 'supports boolean logging.async settings without probing for buffer_size' do
+      stub_const('Legion::Settings', Module.new do
+        def self.[](_key)
+          { async: true }
+        end
+      end)
+
+      expect { Legion::Logging.setup(level: 'info', async: true) }.not_to raise_error
+      expect(Legion::Logging.async?).to be true
+    end
+
+    it 'closes the previous file log device when setup replaces it' do
+      Dir.mktmpdir do |dir|
+        first_path = File.join(dir, 'first.log')
+        second_path = File.join(dir, 'second.log')
+
+        Legion::Logging.setup(level: 'info', log_file: first_path, log_stdout: false, async: false)
+        first_device = Legion::Logging.log.instance_variable_get(:@logdev).dev
+
+        Legion::Logging.setup(level: 'info', log_file: second_path, log_stdout: false, async: false)
+
+        expect(first_device.closed?).to be(true)
+      end
     end
   end
 end

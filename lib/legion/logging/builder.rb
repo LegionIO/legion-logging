@@ -41,7 +41,7 @@ module Legion
       def text_format(include_pid: false, **options)
         log.formatter = proc do |severity, datetime, _progname, msg|
           lex_name = resolve_lex_tag(options)
-          runner_trace = build_runner_trace if lex_name
+          runner_trace = Thread.current[:legion_log_caller] || build_runner_trace if lex_name
 
           string = "[#{datetime}]"
           string.concat("[#{::Process.pid}]") if include_pid
@@ -69,8 +69,7 @@ module Legion
         tag
       end
 
-      def build_runner_trace
-        loc = caller_locations(6, 1)&.first
+      def build_runner_trace(loc = caller_locations(6, 1)&.first)
         return unless loc
 
         path = loc.to_s.split('/').last(2)
@@ -91,16 +90,25 @@ module Legion
       end
 
       def set_log(logfile: nil, log_stdout: nil, **)
+        previous_log = @log
+
         if logfile && log_stdout != false
           path = prepare_log_path(logfile)
           require_relative 'multi_io'
-          io = MultiIO.new($stdout, File.open(path, 'a'))
+          file = File.new(path, 'a')
+          file.sync = true
+          io = MultiIO.new($stdout, file)
           @log = ::Logger.new(io)
         elsif logfile
-          @log = ::Logger.new(prepare_log_path(logfile))
+          file = File.new(prepare_log_path(logfile), 'a')
+          file.sync = true
+          @log = ::Logger.new(file)
         else
           @log = ::Logger.new($stdout)
         end
+
+        close_replaced_log(previous_log)
+        @log
       end
 
       def prepare_log_path(path)
@@ -113,7 +121,7 @@ module Legion
         log.level
       end
 
-      def log_level(level = 'info')
+      def log_level(level = 'debug')
         log.level = case level
                     when 'trace', 'debug'
                       ::Logger::DEBUG
@@ -140,19 +148,41 @@ module Legion
         (@async == true && @async_writer&.alive?) || false
       end
 
+      # rubocop:disable Naming/PredicateMethod
       def start_async_writer(buffer_size: 10_000)
         require_relative 'async_writer'
-        stop_async_writer if @async_writer&.alive?
+        return false if @async_writer&.alive? && stop_async_writer == false
+
         @async_writer = AsyncWriter.new(log, buffer_size: buffer_size)
         @async_writer.start
         @async = true
+        true
       end
 
       def stop_async_writer
         writer = @async_writer
-        @async_writer = nil
+        stopped = writer&.stop
+        return false if stopped == false
+
+        close_replaced_log(writer.logger) if writer.respond_to?(:logger)
+        @async_writer = nil if @async_writer.equal?(writer)
         @async = false
-        writer&.stop
+        true
+      end
+      # rubocop:enable Naming/PredicateMethod
+
+      private
+
+      def close_replaced_log(logger)
+        return unless logger
+        return if logger.equal?(@log)
+        return if @async_writer&.alive? && @async_writer.respond_to?(:logger) && @async_writer.logger.equal?(logger)
+
+        log_device = logger.instance_variable_get(:@logdev)
+        dev = log_device&.dev
+        return if dev.nil? || [$stdout, $stderr].include?(dev)
+
+        dev.close if dev.respond_to?(:close)
       end
     end
   end

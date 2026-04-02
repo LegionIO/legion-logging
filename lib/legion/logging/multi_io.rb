@@ -10,7 +10,6 @@ module Legion
       def write(message)
         @targets.each do |t|
           t.write(message)
-          t.flush if t.respond_to?(:flush)
         end
       end
 

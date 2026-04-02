@@ -30,21 +30,25 @@ module Legion
           transport = TRANSPORTS[transport_type]
           return unless transport
 
-          batch = nil
-          @mutex.synchronize do
-            batch = @buffer.dup
-            @buffer.clear
-          end
+          @flush_mutex ||= Mutex.new
+          @flush_mutex.synchronize do
+            batch = nil
+            @mutex.synchronize { batch = @buffer.dup }
+            return if batch.empty?
 
-          deliver(transport, batch)
+            delivered = deliver(transport, batch)
+            @mutex.synchronize { @buffer.shift(batch.size) if delivered }
+            delivered
+          end
         end
 
         def start
           return unless enabled?
           return if @flush_thread&.alive?
 
-          @buffer = []
-          @mutex  = Mutex.new
+          @buffer ||= []
+          @mutex  ||= Mutex.new
+          @flush_mutex ||= Mutex.new
           interval = flush_interval
           @flush_thread = Thread.new do
             loop do
@@ -83,14 +87,14 @@ module Legion
         end
 
         def deliver(transport, batch)
-          if transport.method(:ship).arity == 1
-            # HttpTransport accepts a batch array
-            transport.ship(batch)
+          if transport.respond_to?(:ship_batch)
+            transport.ship_batch(batch)
           else
-            batch.each { |e| transport.ship(e) }
+            batch.all? { |event| transport.ship(event) }
           end
         rescue StandardError => e
           Legion::Logging.error("Shipper deliver failed: #{e.message}") if defined?(Legion::Logging)
+          false
         end
 
         def shippable_level?(level)

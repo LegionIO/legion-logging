@@ -1,5 +1,25 @@
 # Legion::Logging Changelog
 
+## [1.5.0] - 2026-04-02
+
+### Added
+- `Legion::Logging.current_settings` and `.configuration_generation` so helper mixins can refresh memoized tagged loggers after runtime reconfiguration
+- Component logger overrides from local `settings`, top-level `Legion::Settings[component]`, and `Legion::Settings.dig(:extensions, component)` for `log_level`, `trace`, `trace_size`, and `extended`
+- `Methods#emit_tagged` / `TaggedLogger#dispatch` path so component-level loggers can emit with their own level while preserving tagged context
+- Fallback exception event construction in `Helper#handle_exception` when structured exception support is unavailable
+
+### Changed
+- `setup` and `Builder#log_level` now default to `debug`
+- Default helper/tagged logger behavior enables trace and extended metadata
+- `Helper#log` rebuilds memoized `TaggedLogger` instances when logging configuration changes
+- Runtime logger settings take precedence over loaded global settings for helper-mixed components
+
+### Fixed
+- `setup(async: true)` now tolerates boolean `logging.async` settings without probing for `buffer_size`
+- Exception stdout/file output now falls back safely when singleton logger helpers are unavailable
+- Structured exception publishing is skipped when the exception writer/EventBuilder path is unavailable
+- `TaggedLogger#unknown` falls back to `debug` output when `Legion::Logging.unknown` is unavailable
+
 ## [1.4.3] - 2026-04-01
 
 ### Added

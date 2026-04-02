@@ -7,13 +7,21 @@ module Legion
 
       attr_reader :segments, :trace_enabled, :extended
 
-      def initialize(segments:, level: :info, trace: false, trace_size: 4, extended: false, **_opts)
+      def initialize(
+        segments:,
+        level: Legion::Logging::Settings.default[:level],
+        trace: Legion::Logging::Settings.default[:trace],
+        trace_size: Legion::Logging::Settings.default[:trace_size],
+        extended: Legion::Logging::Settings.default[:extended],
+        **_opts
+      )
         @segments = segments
         @level_value =
           if level.is_a?(Integer)
             level
           else
-            LEVELS.fetch(level.to_s.downcase.to_sym, LEVELS[:info])
+            default_level = Legion::Logging::Settings.default[:level].to_s.downcase.to_sym
+            LEVELS.fetch(level.to_s.downcase.to_sym, LEVELS.fetch(default_level, LEVELS[:info]))
           end
         @trace_enabled = trace
         @trace_size = trace_size
@@ -28,40 +36,40 @@ module Legion
         return unless @level_value < 1
 
         message = yield if message.nil? && block_given?
-        with_segments { Legion::Logging.debug(message) }
+        with_segments { dispatch(:debug, message) }
       end
 
       def info(message = nil)
         return unless @level_value < 2
 
         message = yield if message.nil? && block_given?
-        with_segments { Legion::Logging.info(message) }
+        with_segments { dispatch(:info, message) }
       end
 
       def warn(message = nil)
         return unless @level_value < 3
 
         message = yield if message.nil? && block_given?
-        with_segments { Legion::Logging.warn(message) }
+        with_segments { dispatch(:warn, message) }
       end
 
       def error(message = nil)
         return unless @level_value < 4
 
         message = yield if message.nil? && block_given?
-        with_segments { Legion::Logging.error(message) }
+        with_segments { dispatch(:error, message) }
       end
 
       def fatal(message = nil)
         return unless @level_value < 5
 
         message = yield if message.nil? && block_given?
-        with_segments { Legion::Logging.fatal(message) }
+        with_segments { dispatch(:fatal, message) }
       end
 
       def unknown(message = nil)
         message = yield if message.nil? && block_given?
-        with_segments { Legion::Logging.unknown(message) }
+        with_segments { dispatch(:unknown, message) }
       end
 
       def trace(raw_message = nil, size: @trace_size, log_caller: true)
@@ -85,6 +93,29 @@ module Legion
       end
 
       private
+
+      def dispatch(level, message)
+        return unless defined?(Legion::Logging)
+
+        if Legion::Logging.respond_to?(:emit_tagged)
+          Legion::Logging.emit_tagged(level, message, segments: @segments)
+          return
+        end
+
+        if Legion::Logging.respond_to?(level)
+          Legion::Logging.public_send(level, message)
+          return
+        end
+
+        fallback = fallback_level(level)
+        Legion::Logging.public_send(fallback, message) if fallback && Legion::Logging.respond_to?(fallback)
+      end
+
+      def fallback_level(level)
+        return :debug if level == :unknown
+
+        nil
+      end
 
       def with_segments
         prev = Thread.current[:legion_log_segments]
