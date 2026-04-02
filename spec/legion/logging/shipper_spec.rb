@@ -89,17 +89,37 @@ RSpec.describe Legion::Logging::Shipper do
     it 'calls the transport with buffered events' do
       described_class.instance_variable_set(:@mutex, Mutex.new)
       described_class.instance_variable_set(:@buffer, [{ level: 'error', message: 'test' }])
-      allow(Legion::Logging::Shipper::FileTransport).to receive(:ship).and_return(true)
+      allow(Legion::Logging::Shipper::FileTransport).to receive(:ship_batch).and_return(true)
       described_class.flush
-      expect(Legion::Logging::Shipper::FileTransport).to have_received(:ship)
+      expect(Legion::Logging::Shipper::FileTransport).to have_received(:ship_batch).with([{ level: 'error', message: 'test' }])
     end
 
     it 'clears the buffer after flushing' do
       described_class.instance_variable_set(:@mutex, Mutex.new)
       described_class.instance_variable_set(:@buffer, [{ level: 'error', message: 'test' }])
-      allow(Legion::Logging::Shipper::FileTransport).to receive(:ship).and_return(true)
+      allow(Legion::Logging::Shipper::FileTransport).to receive(:ship_batch).and_return(true)
       described_class.flush
       expect(described_class.instance_variable_get(:@buffer)).to be_empty
+    end
+
+    it 'retains the buffer when delivery returns false' do
+      described_class.instance_variable_set(:@mutex, Mutex.new)
+      described_class.instance_variable_set(:@buffer, [{ level: 'error', message: 'test' }])
+      allow(Legion::Logging::Shipper::FileTransport).to receive(:ship_batch).and_return(false)
+
+      described_class.flush
+
+      expect(described_class.instance_variable_get(:@buffer)).to eq([{ level: 'error', message: 'test' }])
+    end
+
+    it 'retains the buffer when delivery raises' do
+      described_class.instance_variable_set(:@mutex, Mutex.new)
+      described_class.instance_variable_set(:@buffer, [{ level: 'error', message: 'test' }])
+      allow(Legion::Logging::Shipper::FileTransport).to receive(:ship_batch).and_raise(StandardError, 'boom')
+
+      described_class.flush
+
+      expect(described_class.instance_variable_get(:@buffer)).to eq([{ level: 'error', message: 'test' }])
     end
   end
 
@@ -156,20 +176,38 @@ RSpec.describe Legion::Logging::Shipper do
 
     it 'uses file transport when configured' do
       allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :transport).and_return('file')
-      allow(Legion::Logging::Shipper::FileTransport).to receive(:ship).and_return(true)
+      allow(Legion::Logging::Shipper::FileTransport).to receive(:ship_batch).and_return(true)
       described_class.instance_variable_set(:@mutex, Mutex.new)
       described_class.instance_variable_set(:@buffer, [])
       described_class.ship({ level: 'debug', message: 'test' })
-      expect(Legion::Logging::Shipper::FileTransport).to have_received(:ship)
+      expect(Legion::Logging::Shipper::FileTransport).to have_received(:ship_batch).with([{ level: 'debug', message: 'test' }])
     end
 
     it 'uses http transport when configured' do
       allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :transport).and_return('http')
-      allow(Legion::Logging::Shipper::HttpTransport).to receive(:ship).and_return(true)
+      allow(Legion::Logging::Shipper::HttpTransport).to receive(:ship_batch).and_return(true)
       described_class.instance_variable_set(:@mutex, Mutex.new)
       described_class.instance_variable_set(:@buffer, [])
       described_class.ship({ level: 'debug', message: 'test' })
-      expect(Legion::Logging::Shipper::HttpTransport).to have_received(:ship)
+      expect(Legion::Logging::Shipper::HttpTransport).to have_received(:ship_batch).with([{ level: 'debug', message: 'test' }])
+    end
+  end
+
+  describe '.start' do
+    it 'preserves events buffered before the flush thread starts' do
+      stub_const('Legion::Settings', Module.new)
+      allow(Legion::Settings).to receive(:[]).and_return(nil)
+      allow(Legion::Settings).to receive(:dig).and_return(nil)
+      allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :enabled).and_return(true)
+      allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :flush_interval).and_return(60)
+
+      described_class.instance_variable_set(:@buffer, [{ level: 'error', message: 'buffered first' }])
+      described_class.instance_variable_set(:@mutex, Mutex.new)
+      described_class.start
+
+      expect(described_class.instance_variable_get(:@buffer)).to eq([{ level: 'error', message: 'buffered first' }])
+      described_class.instance_variable_get(:@flush_thread)&.kill
+      described_class.instance_variable_set(:@flush_thread, nil)
     end
   end
 end

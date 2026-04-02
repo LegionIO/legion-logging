@@ -11,10 +11,18 @@ module Legion
 
         class << self
           def ship(event)
+            ship_batch([event])
+          end
+
+          def ship_batch(events)
+            batch = Array(events)
+            return true if batch.empty?
+
             path = resolve_path
             FileUtils.mkdir_p(File.dirname(path))
             File.open(path, 'a') do |f|
-              f.puts(::JSON.generate(event))
+              f.write(batch.map { |event| ::JSON.generate(event) }.join("\n"))
+              f.write("\n")
             end
             true
           rescue StandardError => e

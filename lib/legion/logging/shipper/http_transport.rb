@@ -10,6 +10,10 @@ module Legion
       module HttpTransport
         class << self
           def ship(events)
+            ship_batch(events)
+          end
+
+          def ship_batch(events)
             endpoint = resolve_endpoint
             return false unless endpoint
 

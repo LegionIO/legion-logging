@@ -21,6 +21,18 @@ RSpec.describe Legion::Logging::MultiIO do
       io.close
       expect(File.read(log_file)).to include('hello')
     end
+
+    it 'does not flush each target on every write' do
+      target = instance_double(IO)
+      allow(target).to receive(:write)
+      allow(target).to receive(:flush)
+      io = described_class.new(target)
+
+      io.write("hello\n")
+
+      expect(target).to have_received(:write).with("hello\n")
+      expect(target).not_to have_received(:flush)
+    end
   end
 
   describe '#close' do
