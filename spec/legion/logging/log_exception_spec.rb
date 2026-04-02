@@ -116,4 +116,25 @@ RSpec.describe 'Legion::Logging.log_exception' do
     Legion::Logging.log_exception(error)
     expect(captured).to eq(ENV.fetch('USER', nil))
   end
+
+  it 'redacts the sync log line and structured event when redaction is enabled' do
+    fake_loader = double('loader')
+    captured = nil
+    stub_const('Legion::Settings', Module.new)
+    Legion::Settings.instance_variable_set(:@loader, fake_loader)
+    allow(fake_loader).to receive(:dig).and_return(nil)
+    allow(fake_loader).to receive(:dig).with(:logging, :redaction, :enabled).and_return(true)
+    Legion::Logging.exception_writer = lambda { |event, **|
+      captured = event
+    }
+
+    redacted_error = RuntimeError.new('SSN 123-45-6789')
+    redacted_error.set_backtrace(error.backtrace)
+
+    expect(Legion::Logging.log).to receive(:error).with(include('[REDACTED]')).and_call_original
+    Legion::Logging.log_exception(redacted_error)
+
+    expect(captured[:message]).to include('[REDACTED]')
+    expect(captured[:message]).not_to include('123-45-6789')
+  end
 end

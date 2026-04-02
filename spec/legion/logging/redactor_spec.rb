@@ -124,6 +124,36 @@ RSpec.describe Legion::Logging::Redactor do
       result = described_class.redact(event)
       expect(result['password']).to eq('[REDACTED]')
     end
+
+    it 'redacts auth_token style fields' do
+      event  = { auth_token: 'top-secret-token' }
+      result = described_class.redact(event)
+      expect(result[:auth_token]).to eq('[REDACTED]')
+    end
+
+    it 'redacts client_secret style fields' do
+      event  = { client_secret: 'super-secret' }
+      result = described_class.redact(event)
+      expect(result[:client_secret]).to eq('[REDACTED]')
+    end
+
+    it 'redacts access_token style fields' do
+      event  = { access_token: 'oauth-token' }
+      result = described_class.redact(event)
+      expect(result[:access_token]).to eq('[REDACTED]')
+    end
+
+    it 'redacts private_key style fields' do
+      event  = { private_key: '-----BEGIN PRIVATE KEY-----' }
+      result = described_class.redact(event)
+      expect(result[:private_key]).to eq('[REDACTED]')
+    end
+
+    it 'does not redact known non-secret key fields' do
+      event  = { routing_key: 'legion.logging.log.info.core.unknown' }
+      result = described_class.redact(event)
+      expect(result[:routing_key]).to eq('legion.logging.log.info.core.unknown')
+    end
   end
 
   describe 'custom patterns' do
@@ -152,6 +182,21 @@ RSpec.describe Legion::Logging::Redactor do
 
     it 'returns empty hash when Legion::Settings is not defined' do
       expect(described_class.send(:custom_patterns)).to eq({})
+    end
+
+    it 'refreshes cached patterns without restarting the process' do
+      stub_const('Legion::Settings', Module.new)
+      allow(Legion::Settings).to receive(:[]).and_return(nil)
+      allow(Legion::Settings).to receive(:dig).with(:logging, :redactor, :custom_patterns)
+                                              .and_return({ 'member_id' => '\bU\d{9}\b' },
+                                                          { 'account_id' => '\bA\d{6}\b' })
+
+      expect(described_class.redact_string('member U123456789 enrolled')).to include('[REDACTED]')
+      expect(described_class.redact_string('account A123456 active')).to include('A123456')
+
+      described_class.refresh_patterns!
+
+      expect(described_class.redact_string('account A123456 active')).to include('[REDACTED]')
     end
   end
 

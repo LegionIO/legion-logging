@@ -18,7 +18,18 @@ module Legion
         bearer_token:   %r{Bearer\s+[A-Za-z0-9._~+/=-]{20,}}i
       }.freeze
 
-      SENSITIVE_FIELDS = %w[password secret token api_key authorization].freeze
+      SENSITIVE_FIELDS = %w[
+        password
+        secret
+        token
+        api_key
+        access_key
+        private_key
+        public_key
+        authorization
+      ].freeze
+      SENSITIVE_SUFFIXES = %w[token secret password passphrase credential credentials].freeze
+      SAFE_KEY_FIELDS = %w[primary_key foreign_key sort_key partition_key routing_key].freeze
 
       REDACTED = '[REDACTED]'
 
@@ -49,7 +60,17 @@ module Legion
         private
 
         def sensitive_field?(key)
-          SENSITIVE_FIELDS.include?(key.to_s.downcase)
+          normalized = normalize_key(key)
+          return false if SAFE_KEY_FIELDS.include?(normalized)
+          return true if SENSITIVE_FIELDS.include?(normalized)
+          return true if normalized.include?('authorization')
+          return true if normalized.start_with?('auth_') || normalized.end_with?('_auth')
+          return true if normalized.start_with?('bearer_') || normalized.end_with?('_bearer')
+          return true if SENSITIVE_SUFFIXES.any? { |suffix| normalized.end_with?("_#{suffix}") }
+
+          %w[api access client private public auth secret signing session].any? do |prefix|
+            normalized == "#{prefix}_key"
+          end
         end
 
         def all_patterns
@@ -78,6 +99,16 @@ module Legion
 
         def reset_pattern_cache!
           @all_patterns = nil
+        end
+
+        def refresh_patterns!
+          reset_pattern_cache!
+        end
+
+        public :refresh_patterns!
+
+        def normalize_key(key)
+          key.to_s.downcase.gsub(/[^a-z0-9]+/, '_').gsub(/\A_+|_+\z/, '')
         end
       end
     end

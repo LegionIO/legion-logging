@@ -95,6 +95,7 @@ module Legion
           color:       @color
         }.freeze
         @configuration_generation = configuration_generation + 1
+        Legion::Logging::Redactor.refresh_patterns! if defined?(Legion::Logging::Redactor)
         if async
           buffer = if defined?(Legion::Settings) && Legion::Settings.respond_to?(:[])
                      logging_settings = Legion::Settings[:logging]
