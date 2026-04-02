@@ -131,6 +131,20 @@ module Legion
         end
       end
 
+      def emit_tagged(level, message = nil, segments: nil, method_ctx: nil)
+        level = level.to_sym
+        message = yield if message.nil? && block_given?
+        return if message.nil?
+
+        raw = maybe_redact(message)
+        formatted = format_message_for_level(level, raw)
+
+        with_tagged_context(segments, method_ctx) do
+          write_forced(level, formatted)
+          fire_log_writer(level, raw) if %i[warn error fatal].include?(level)
+        end
+      end
+
       def runner_exception(exc, **opts)
         log_exception(exc, handled: true, **opts)
         { success: false, message: exc.message, backtrace: exc.backtrace }.merge(opts)
@@ -193,6 +207,48 @@ module Legion
         Legion::Logging::Redactor.redact_string(message)
       rescue StandardError
         message
+      end
+
+      def format_message_for_level(level, message)
+        return Rainbow(message).blue if level == :debug && @color
+        return Rainbow(message).green if level == :info && @color
+        return Rainbow(message).yellow if level == :warn && @color
+        return Rainbow(message).red if level == :error && @color
+        return Rainbow(message).darkred if level == :fatal && @color
+        return Rainbow(message).purple if level == :unknown && @color
+
+        message
+      end
+
+      def with_tagged_context(segments, method_ctx)
+        prev_segments = Thread.current[:legion_log_segments]
+        prev_method_ctx = Thread.current[:legion_log_method]
+
+        Thread.current[:legion_log_segments] = segments unless segments.nil?
+        Thread.current[:legion_log_method] = method_ctx unless method_ctx.nil?
+        yield
+      ensure
+        Thread.current[:legion_log_segments] = prev_segments
+        Thread.current[:legion_log_method] = prev_method_ctx
+      end
+
+      def write_forced(level, message)
+        logger = log
+        formatter = logger.formatter || ::Logger::Formatter.new
+        rendered = formatter.call(severity_label_for(level), Time.now, nil, message)
+
+        log_device = logger.instance_variable_get(:@logdev)
+        if log_device.respond_to?(:write)
+          log_device.write(rendered)
+        else
+          $stdout.write(rendered)
+        end
+      end
+
+      def severity_label_for(level)
+        return 'ANY' if level == :unknown
+
+        level.to_s.upcase
       end
 
       def redaction_enabled?

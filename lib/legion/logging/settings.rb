@@ -6,9 +6,9 @@ module Legion
       def self.default
         {
           level:      :info,
-          trace:      false,
+          trace:      true,
           trace_size: 4,
-          extended:   false
+          extended:   true
         }
       end
     end
