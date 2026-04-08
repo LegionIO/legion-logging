@@ -117,6 +117,40 @@ RSpec.describe 'Legion::Logging.log_exception' do
     expect(captured).to eq(ENV.fetch('USER', nil))
   end
 
+  describe 'backtrace formatting in the sync log line' do
+    it 'includes backtrace frames in the logged message when the exception has a backtrace' do
+      expect(Legion::Logging.log).to receive(:error).with(
+        satisfy { |msg| msg.include?('TypeError: wrong argument type') && msg.include?('spec/') }
+      ).and_call_original
+      Legion::Logging.log_exception(error)
+    end
+
+    it 'includes an overflow count line when backtrace exceeds the limit' do
+      deep_error = RuntimeError.new('deep')
+      deep_error.set_backtrace(Array.new(15, 'fake_file.rb:1:in `fake_method`'))
+      expect(Legion::Logging.log).to receive(:error).with(
+        satisfy { |msg| msg.include?('... 5 more') }
+      ).and_call_original
+      Legion::Logging.log_exception(deep_error)
+    end
+
+    it 'does not include an overflow line when backtrace is within the limit' do
+      short_error = RuntimeError.new('short')
+      short_error.set_backtrace(Array.new(3, 'fake_file.rb:1:in `fake_method`'))
+      expect(Legion::Logging.log).to receive(:error).with(
+        satisfy { |msg| !msg.include?('more') }
+      ).and_call_original
+      Legion::Logging.log_exception(short_error)
+    end
+
+    it 'falls back to message-only when the exception has no backtrace' do
+      no_bt_error = RuntimeError.new('no backtrace')
+      # Do not call set_backtrace — backtrace is nil
+      expect(Legion::Logging.log).to receive(:error).with('no backtrace').and_call_original
+      Legion::Logging.log_exception(no_bt_error)
+    end
+  end
+
   it 'redacts the sync log line and structured event when redaction is enabled' do
     fake_loader = double('loader')
     captured = nil

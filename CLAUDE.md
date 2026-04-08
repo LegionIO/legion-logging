@@ -25,7 +25,7 @@ Legion::Logging (singleton module)
 ├── MultiIO           # Write to multiple destinations simultaneously
 ├── TaggedLogger      # Logger wrapper that prepends structured tags to each message
 ├── CategoryRegistry  # Registry of named log categories with description and expected_fields
-├── MethodTracer      # Tracing module for instrumenting method calls (timing, args)
+├── MethodTracer      # Tracing module for instrumenting method calls (call/return, formatted args)
 ├── SIEMExporter      # PHI-redacting SIEM export (Splunk HEC, ELK/OpenSearch)
 ├── Shipper           # Buffered log event forwarding; sub-transports: FileTransport, HttpTransport
 ├── Redactor          # PII/PHI + secret pattern redaction; opt-in via logging.redaction.enabled
@@ -75,7 +75,7 @@ Legion::Logging.exception_writer # -> lambda(->(event, routing_key:, headers:, p
 | `lib/legion/logging/event_builder.rb` | Structured event payload builder; `fingerprint` for MD5 dedup |
 | `lib/legion/logging/tagged_logger.rb` | Logger wrapper that prepends structured tags to each message |
 | `lib/legion/logging/category_registry.rb` | Named log category registration and lookup |
-| `lib/legion/logging/method_tracer.rb` | Method call tracing instrumentation (timing, args) |
+| `lib/legion/logging/method_tracer.rb` | Method call tracing instrumentation (call/return, formatted args) |
 | `lib/legion/logging/shipper.rb` | Buffered log event forwarding to external systems |
 | `lib/legion/logging/shipper/file_transport.rb` | File-based log shipper transport |
 | `lib/legion/logging/shipper/http_transport.rb` | HTTP-based log shipper transport |
