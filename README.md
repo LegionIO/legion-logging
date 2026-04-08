@@ -2,7 +2,7 @@
 
 Logging module for the [LegionIO](https://github.com/LegionIO/LegionIO) framework. Provides colorized console output via Rainbow, structured JSON logging, multi-output IO, and a consistent logging interface across all Legion gems and extensions.
 
-**Version**: 1.4.1
+**Version**: 1.5.0
 
 ## Installation
 
