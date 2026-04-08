@@ -1,8 +1,11 @@
 # Legion::Logging Changelog
 
-## [1.5.0] - 2026-04-02
+## [1.5.0] - 2026-04-08
 
 ### Added
+- `Legion::Logging::MethodTracer` module: opt-in TracePoint-based method call tracing with indent-aware call/return output and parameter formatting
+- `Helper.included` / `Helper.extended` hooks auto-attach `MethodTracer` when `MethodTracer::ENABLED` is true
+- `log_exception` now formats backtrace (up to 10 frames + overflow count) inline in the stdout/file log line
 - `Legion::Logging.current_settings` and `.configuration_generation` so helper mixins can refresh memoized tagged loggers after runtime reconfiguration
 - Component logger overrides from local `settings`, top-level `Legion::Settings[component]`, and `Legion::Settings.dig(:extensions, component)` for `log_level`, `trace`, `trace_size`, and `extended`
 - `Methods#emit_tagged` / `TaggedLogger#dispatch` path so component-level loggers can emit with their own level while preserving tagged context

@@ -104,9 +104,17 @@ module Legion
                         source_code_uri: nil, handled: false, payload_summary: nil,
                         task_id: nil, **extra)
         level = level.to_sym if level.respond_to?(:to_sym)
-        # 1. Log human-readable line to stdout/file (bypass writer callbacks)
+        # 1. Log human-readable line + backtrace to stdout/file (bypass writer callbacks)
         msg = exception.respond_to?(:message) ? exception.message : exception.to_s
         msg = maybe_redact(msg)
+        bt = Array(exception.backtrace)
+        if bt.any?
+          lines = ["#{exception.class}: #{msg}"]
+          bt.first(10).each { |frame| lines << "  #{frame}" }
+          remaining = bt.length - 10
+          lines << "  ... #{remaining} more" if remaining.positive?
+          msg = lines.join("\n")
+        end
         log.public_send(level, msg) if respond_to?(:log) && log.respond_to?(level)
 
         # 2. Build rich exception event

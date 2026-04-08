@@ -2,6 +2,7 @@
 
 require 'securerandom'
 require_relative 'tagged_logger'
+require_relative 'method_tracer'
 
 module Legion
   module Logging
@@ -100,6 +101,14 @@ module Legion
 
         write_exception_to_log(exception, event, level, segments)
         publish_exception(event, level) if structured_exception_support?
+      end
+
+      def self.included(base)
+        MethodTracer.attach(base) if defined?(MethodTracer) && MethodTracer::ENABLED
+      end
+
+      def self.extended(base)
+        MethodTracer.attach(base, match_singleton: true) if defined?(MethodTracer) && MethodTracer::ENABLED
       end
 
       private
