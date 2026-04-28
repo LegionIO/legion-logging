@@ -400,11 +400,12 @@ RSpec.describe Legion::Logging::Helper do
       )
     end
 
-    it 'caps backtrace at EXCEPTION_BACKTRACE_LIMIT' do
+    it 'includes the full backtrace' do
       exc = StandardError.new('deep stack')
       exc.set_backtrace(Array.new(25) { |i| "/app/lib/file.rb:#{i}:in `method_#{i}`" })
       subject.handle_exception(exc)
-      expect(underlying_logger).to have_received(:error).with(/\.\.\. 15 more/)
+      expect(underlying_logger).to have_received(:error).with(%r{/app/lib/file\.rb:24})
+      expect(underlying_logger).not_to have_received(:error).with(/\.\.\./)
     end
 
     it 'supports custom log level' do

@@ -114,7 +114,7 @@ RSpec.describe 'Legion::Logging.log_exception' do
       captured = event[:user]
     }
     Legion::Logging.log_exception(error)
-    expect(captured).to eq(ENV.fetch('USER', nil))
+    expect(captured).to eq(Legion::Logging::Redactor.redact_string(ENV.fetch('USER', nil)))
   end
 
   describe 'backtrace formatting in the sync log line' do
@@ -125,11 +125,11 @@ RSpec.describe 'Legion::Logging.log_exception' do
       Legion::Logging.log_exception(error)
     end
 
-    it 'includes an overflow count line when backtrace exceeds the limit' do
+    it 'includes the full backtrace when many frames are present' do
       deep_error = RuntimeError.new('deep')
-      deep_error.set_backtrace(Array.new(15, 'fake_file.rb:1:in `fake_method`'))
+      deep_error.set_backtrace(Array.new(15) { |i| "fake_file.rb:#{i}:in `fake_method_#{i}`" })
       expect(Legion::Logging.log).to receive(:error).with(
-        satisfy { |msg| msg.include?('... 5 more') }
+        satisfy { |msg| msg.include?('fake_file.rb:14') && !msg.include?('...') }
       ).and_call_original
       Legion::Logging.log_exception(deep_error)
     end
