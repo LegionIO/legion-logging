@@ -1,5 +1,10 @@
 # Legion::Logging Changelog
 
+## [1.5.2] - 2026-04-27
+
+### Changed
+- Exception stdout/file log lines now include the full backtrace instead of truncating after 10 frames with a `... N more` suffix.
+
 ## [1.5.1] - 2026-04-08
 
 ### Added

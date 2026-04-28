@@ -109,11 +109,8 @@ module Legion
         msg = maybe_redact(msg)
         bt = Array(exception.backtrace)
         if bt.any?
-          limit = defined?(Legion::Logging::Helper::EXCEPTION_BACKTRACE_LIMIT) ? Legion::Logging::Helper::EXCEPTION_BACKTRACE_LIMIT : 10
           lines = ["#{exception.class}: #{msg}"]
-          bt.first(limit).each { |frame| lines << "  #{frame}" }
-          remaining = bt.length - limit
-          lines << "  ... #{remaining} more" if remaining.positive?
+          bt.each { |frame| lines << "  #{frame}" }
           msg = lines.join("\n")
         end
         log.public_send(level, msg) if respond_to?(:log) && log.respond_to?(level)

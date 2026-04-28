@@ -32,7 +32,6 @@ module Legion
         'middleware' => :middleware
       }.freeze
 
-      EXCEPTION_BACKTRACE_LIMIT = 10
       EXCEPTION_PRIORITY = { warn: 0, error: 5, fatal: 9 }.freeze
       EXCEPTION_COLORS = {
         fatal:   :darkred,
@@ -489,11 +488,7 @@ module Legion
         lines << "  #{context_line}" unless context_line.empty?
 
         bt = exception.backtrace
-        if bt&.any?
-          bt.first(EXCEPTION_BACKTRACE_LIMIT).each { |frame| lines << "  #{frame}" }
-          remaining = bt.length - EXCEPTION_BACKTRACE_LIMIT
-          lines << "  ... #{remaining} more" if remaining.positive?
-        end
+        bt.each { |frame| lines << "  #{frame}" } if bt&.any?
 
         lines.join("\n")
       end
