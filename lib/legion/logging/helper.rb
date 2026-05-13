@@ -487,8 +487,18 @@ module Legion
         context_line = build_context_line(event)
         lines << "  #{context_line}" unless context_line.empty?
 
-        bt = exception.backtrace
-        bt.each { |frame| lines << "  #{frame}" } if bt&.any?
+        max_frames = if event[:backtrace_limit].nil?
+                       defined?(Legion::Settings) ? Legion::Settings[:logging][:backtrace_limit] : nil
+                     else
+                       event[:backtrace_limit]
+                     end
+        unless max_frames&.zero?
+          bt = exception.backtrace
+          if bt&.any?
+            frames = max_frames ? bt.first(max_frames) : bt
+            frames.each { |frame| lines << "  #{frame}" }
+          end
+        end
 
         lines.join("\n")
       end
