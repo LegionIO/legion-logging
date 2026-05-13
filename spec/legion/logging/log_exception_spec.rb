@@ -125,13 +125,31 @@ RSpec.describe 'Legion::Logging.log_exception' do
       Legion::Logging.log_exception(error)
     end
 
-    it 'includes the full backtrace when many frames are present' do
+    it 'includes full backtrace by default (no limit)' do
       deep_error = RuntimeError.new('deep')
       deep_error.set_backtrace(Array.new(15) { |i| "fake_file.rb:#{i}:in `fake_method_#{i}`" })
       expect(Legion::Logging.log).to receive(:error).with(
-        satisfy { |msg| msg.include?('fake_file.rb:14') && !msg.include?('...') }
+        satisfy { |msg| msg.include?('fake_file.rb:14') }
       ).and_call_original
       Legion::Logging.log_exception(deep_error)
+    end
+
+    it 'respects backtrace_limit: 0 to suppress all frames' do
+      deep_error = RuntimeError.new('no trace')
+      deep_error.set_backtrace(Array.new(5) { |i| "fake_file.rb:#{i}:in `fake_method_#{i}`" })
+      expect(Legion::Logging.log).to receive(:error).with(
+        satisfy { |msg| !msg.include?('fake_file.rb') }
+      ).and_call_original
+      Legion::Logging.log_exception(deep_error, backtrace_limit: 0)
+    end
+
+    it 'respects explicit backtrace_limit kwarg' do
+      deep_error = RuntimeError.new('limited')
+      deep_error.set_backtrace(Array.new(15) { |i| "fake_file.rb:#{i}:in `fake_method_#{i}`" })
+      expect(Legion::Logging.log).to receive(:error).with(
+        satisfy { |msg| msg.include?('fake_file.rb:2') && !msg.include?('fake_file.rb:3') }
+      ).and_call_original
+      Legion::Logging.log_exception(deep_error, backtrace_limit: 3)
     end
 
     it 'does not include an overflow line when backtrace is within the limit' do
@@ -154,7 +172,15 @@ RSpec.describe 'Legion::Logging.log_exception' do
   it 'redacts the sync log line and structured event when redaction is enabled' do
     fake_loader = double('loader')
     captured = nil
-    stub_const('Legion::Settings', Module.new)
+    settings_mod = Module.new do
+      def self.[](key)
+        case key
+        when :logging then { backtrace_limit: nil, redaction: { enabled: true } }
+        else {}
+        end
+      end
+    end
+    stub_const('Legion::Settings', settings_mod)
     Legion::Settings.instance_variable_set(:@loader, fake_loader)
     allow(fake_loader).to receive(:dig).and_return(nil)
     allow(fake_loader).to receive(:dig).with(:logging, :redaction, :enabled).and_return(true)

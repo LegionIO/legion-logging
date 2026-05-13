@@ -1,5 +1,12 @@
 # Legion::Logging Changelog
 
+## [1.5.3] - 2026-05-13
+
+### Added
+- `backtrace_limit:` kwarg on `log_exception` and `handle_exception` (nil=full, 0=suppress, N=cap at N frames)
+- `backtrace_limit` key in `Legion::Logging::Settings.default` (defaults to nil — full backtraces)
+- Settings-driven default reads from `Legion::Settings[:logging][:backtrace_limit]` when no explicit kwarg is passed
+
 ## [1.5.2] - 2026-04-27
 
 ### Changed

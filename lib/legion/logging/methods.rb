@@ -102,17 +102,12 @@ module Legion
       def log_exception(exception, level: :error, lex: nil, component_type: nil,
                         gem_name: nil, lex_version: nil, gem_path: nil,
                         source_code_uri: nil, handled: false, payload_summary: nil,
-                        task_id: nil, **extra)
+                        task_id: nil, backtrace_limit: nil, **extra)
         level = level.to_sym if level.respond_to?(:to_sym)
         # 1. Log human-readable line + backtrace to stdout/file (bypass writer callbacks)
         msg = exception.respond_to?(:message) ? exception.message : exception.to_s
         msg = maybe_redact(msg)
-        bt = Array(exception.backtrace)
-        if bt.any?
-          lines = ["#{exception.class}: #{msg}"]
-          bt.each { |frame| lines << "  #{frame}" }
-          msg = lines.join("\n")
-        end
+        msg = build_exception_log_message(exception, msg, backtrace_limit)
         log.public_send(level, msg) if respond_to?(:log) && log.respond_to?(level)
 
         # 2. Build rich exception event
@@ -154,6 +149,30 @@ module Legion
       end
 
       private
+
+      def resolve_backtrace_limit(explicit_limit)
+        return explicit_limit unless explicit_limit.nil?
+        return nil unless defined?(Legion::Settings)
+
+        Legion::Settings[:logging][:backtrace_limit]
+      end
+
+      def build_exception_log_message(exception, msg, backtrace_limit)
+        max_frames = resolve_backtrace_limit(backtrace_limit)
+        bt = collect_backtrace_frames(exception, max_frames)
+        return msg unless bt.any?
+
+        lines = ["#{exception.class}: #{msg}"]
+        bt.each { |frame| lines << "  #{frame}" }
+        lines.join("\n")
+      end
+
+      def collect_backtrace_frames(exception, max_frames)
+        return [] if max_frames&.zero?
+
+        frames = Array(exception.backtrace)
+        max_frames ? frames.first(max_frames) : frames
+      end
 
       def maybe_redact(message)
         return message unless message.is_a?(String)
