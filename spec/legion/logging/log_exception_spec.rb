@@ -51,6 +51,46 @@ RSpec.describe 'Legion::Logging.log_exception' do
     expect(captured['x-gem-name']).to eq('lex-eval')
   end
 
+  it 'includes protocol, Legion version, and identity headers' do
+    stub_const('Legion::VERSION', '1.9.99')
+    stub_const('Legion::Identity::Process', Class.new do
+      def self.resolved? = true
+
+      def self.identity_hash
+        {
+          canonical_name:  'agent.local',
+          trust:           'local',
+          id:              'ident-123',
+          kind:            'process',
+          mode:            'service',
+          source:          'lex-identity-system',
+          db_principal_id: 42,
+          db_identity_id:  99
+        }
+      end
+    end)
+
+    captured = nil
+    Legion::Logging.exception_writer = lambda { |_event, headers:, **|
+      captured = headers
+    }
+
+    Legion::Logging.log_exception(error)
+
+    expect(captured).to include(
+      'legion_protocol_version'           => '2.0',
+      'x-legion-version'                  => '1.9.99',
+      'x-legion-identity-canonical-name'  => 'agent.local',
+      'x-legion-identity-trust'           => 'local',
+      'x-legion-identity-id'              => 'ident-123',
+      'x-legion-identity-kind'            => 'process',
+      'x-legion-identity-mode'            => 'service',
+      'x-legion-identity-source'          => 'lex-identity-system',
+      'x-legion-identity-db-principal-id' => 42,
+      'x-legion-identity-db-identity-id'  => 99
+    )
+  end
+
   it 'includes AMQP properties' do
     captured = nil
     Legion::Logging.exception_writer = lambda { |_event, properties:, **|
