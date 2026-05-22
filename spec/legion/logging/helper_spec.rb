@@ -388,6 +388,20 @@ RSpec.describe Legion::Logging::Helper do
       writer = instance_double(Proc)
       allow(writer).to receive(:call)
       allow(Legion::Logging).to receive(:exception_writer).and_return(writer)
+      stub_const('Legion::VERSION', '1.9.99')
+      stub_const('Legion::Identity::Process', Class.new do
+        def self.resolved? = true
+
+        def self.identity_hash
+          {
+            canonical_name: 'agent.local',
+            id:             'ident-123',
+            kind:           'process',
+            mode:           'service',
+            source:         'lex-identity-system'
+          }
+        end
+      end)
 
       exc = StandardError.new('publish test')
       subject.handle_exception(exc)
@@ -395,7 +409,13 @@ RSpec.describe Legion::Logging::Helper do
       expect(writer).to have_received(:call).with(
         hash_including(exception_class: 'StandardError'),
         routing_key: /legion\.logging\.exception\.error/,
-        headers:     hash_including('x-exception-class' => 'StandardError'),
+        headers:     hash_including(
+          'legion_protocol_version'          => '2.0',
+          'x-legion-version'                 => '1.9.99',
+          'x-exception-class'                => 'StandardError',
+          'x-legion-identity-canonical-name' => 'agent.local',
+          'x-legion-identity-id'             => 'ident-123'
+        ),
         properties:  hash_including(type: 'exception_event')
       )
     end

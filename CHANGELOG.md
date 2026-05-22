@@ -1,5 +1,11 @@
 # Legion::Logging Changelog
 
+## [1.5.4] - 2026-05-22
+
+### Added
+- Structured log and exception AMQP writer headers now include `legion_protocol_version`, best-effort `x-legion-version`, and transport-standard `x-legion-identity-*` headers when process identity is resolved.
+- `log_writer` now receives the same `headers:` and `properties:` envelope metadata shape as `exception_writer`.
+
 ## [1.5.3] - 2026-05-13
 
 ### Added

@@ -171,8 +171,8 @@ RSpec.describe Legion::Logging::AsyncWriter do
 
     it 'calls log_writer when writer_context is present' do
       captured = nil
-      Legion::Logging.log_writer = lambda { |event, routing_key:|
-        captured = { event: event, routing_key: routing_key }
+      Legion::Logging.log_writer = lambda { |event, routing_key:, headers: nil, properties: nil|
+        captured = { event: event, routing_key: routing_key, headers: headers, properties: properties }
       }
 
       event = { level: :error, message: 'writer test', lex: 'core' }
