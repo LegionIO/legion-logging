@@ -78,7 +78,7 @@ RSpec.describe Legion::Logging do
   end
 
   before do
-    @logger = Legion::Logging::Logger.new(level: 'debug', lex: 'foobar', trace: true, extended: true)
+    @logger = Legion::Logging::Logger.new(level: 'debug', lex: 'foobar', trace: true, extended: true, async: false)
   end
   it 'can log with lex name' do
     expect { @logger.fatal('message') }.to output(/message/).to_stdout_from_any_process

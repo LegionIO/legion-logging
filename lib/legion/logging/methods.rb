@@ -66,11 +66,9 @@ module Legion
         return unless log.level < 5
 
         message = yield if message.nil? && block_given?
-        message = maybe_redact(message)
-        raw = message
-        message = Rainbow(message).darkred if @color
-        log.fatal(message)
-        fire_log_writer(:fatal, raw)
+        raw = maybe_redact(message)
+        formatted = format_message_for_level(:fatal, raw)
+        write_async_or_sync(:fatal, formatted, raw, writer_context: build_writer_context(:fatal, raw))
       end
 
       def unknown(message = nil)
@@ -89,8 +87,20 @@ module Legion
         formatted = format_message_for_level(level, raw)
 
         with_tagged_context(segments, method_ctx) do
-          write_forced(level, formatted)
-          fire_log_writer(level, raw) if %i[warn error fatal].include?(level)
+          ctx = %i[warn error fatal].include?(level) ? build_writer_context(level, raw) : nil
+          writer = @async_writer
+          caller_trace = capture_runner_trace_for_async
+          if writer&.alive?
+            writer.push(AsyncWriter::LogEntry.new(
+                          level: level, message: formatted, writer_context: ctx,
+                          segments: Thread.current[:legion_log_segments],
+                          method_ctx: Thread.current[:legion_log_method],
+                          caller_trace: caller_trace
+                        ))
+          else
+            with_caller_trace(caller_trace) { write_forced(level, formatted) }
+            fire_log_writer(level, raw) if ctx
+          end
         end
       end
 
@@ -104,11 +114,12 @@ module Legion
                         source_code_uri: nil, handled: false, payload_summary: nil,
                         task_id: nil, backtrace_limit: nil, **extra)
         level = level.to_sym if level.respond_to?(:to_sym)
-        # 1. Log human-readable line + backtrace to stdout/file (bypass writer callbacks)
+        # 1. Log human-readable line + backtrace via async writer
         msg = exception.respond_to?(:message) ? exception.message : exception.to_s
         msg = maybe_redact(msg)
         msg = build_exception_log_message(exception, msg, backtrace_limit)
-        log.public_send(level, msg) if respond_to?(:log) && log.respond_to?(level)
+        formatted = format_message_for_level(level, msg)
+        write_async_or_sync(level, formatted, msg)
 
         # 2. Build rich exception event
         event = Legion::Logging::EventBuilder.build_exception(

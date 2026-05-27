@@ -210,9 +210,9 @@ RSpec.describe 'Legion::Logging::Logger instance async' do
     logger.stop_async_writer
   end
 
-  it 'defaults to sync when async not specified' do
+  it 'defaults to async when async not specified' do
     logger = Legion::Logging::Logger.new(level: 'info')
-    expect(logger.async?).to be false
+    expect(logger.async?).to be true
   end
 end
 
@@ -252,10 +252,10 @@ RSpec.describe 'async routing through Methods' do
     Legion::Logging.warn('async warn')
   end
 
-  it 'does NOT route fatal through async writer' do
+  it 'routes fatal through async writer' do
     writer = Legion::Logging.instance_variable_get(:@async_writer)
-    expect(writer).not_to receive(:push)
-    Legion::Logging.fatal('sync fatal')
+    expect(writer).to receive(:push).and_call_original
+    Legion::Logging.fatal('async fatal')
   end
 
   it 'falls back to sync when async is disabled' do

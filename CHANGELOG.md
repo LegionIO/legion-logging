@@ -1,5 +1,13 @@
 # Legion::Logging Changelog
 
+## [1.5.5] - 2026-05-27
+
+### Fixed
+- `emit_tagged` (used by all Legion::Logging::Helper consumers) now routes through the async writer instead of doing synchronous IO#write — eliminates IO mutex contention across all consumer threads
+- `fatal` level now routes through async writer consistently with all other levels
+- `log_exception` now writes through async writer instead of direct `log.public_send`
+- `Legion::Logging::Logger` defaults to `async: true`, ensuring all per-extension logger instances use non-blocking writes
+
 ## [1.5.4] - 2026-05-22
 
 ### Added

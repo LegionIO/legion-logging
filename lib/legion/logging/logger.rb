@@ -11,7 +11,7 @@ module Legion
       include Legion::Logging::Methods
       include Legion::Logging::Builder
 
-      def initialize(level: 'info', log_file: nil, log_stdout: nil, lex: nil, trace: false, extended: false, trace_size: 4, format: :text, async: false, **opts)
+      def initialize(level: 'info', log_file: nil, log_stdout: nil, lex: nil, trace: false, extended: false, trace_size: 4, format: :text, async: true, **opts)
         @lex = lex
         set_log(logfile: log_file, log_stdout: log_stdout)
         log_level(level)
