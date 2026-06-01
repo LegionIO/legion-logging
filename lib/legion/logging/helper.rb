@@ -359,25 +359,62 @@ module Legion
         return unless defined?(Legion::Settings)
         return unless Legion::Settings.respond_to?(:loaded?) ? Legion::Settings.loaded? : true
 
-        key = derive_component_settings_key
-        return unless key
+        keys = derive_component_settings_keys
+        return unless keys&.any?
 
-        top_level = Legion::Settings[key]
+        if keys.length > 1
+          result = dig_settings(Legion::Settings[:extensions], keys)
+          return result if result.is_a?(Hash)
+        end
+
+        single_key = keys.length == 1 ? keys.first : keys.join('_').to_sym
+        top_level = Legion::Settings[single_key]
         return top_level if top_level.is_a?(Hash)
 
-        extension_settings = Legion::Settings.dig(:extensions, key)
+        extension_settings = if keys.length > 1
+                               dig_settings(Legion::Settings[:extensions], keys)
+                             else
+                               Legion::Settings.dig(:extensions, single_key)
+                             end
         extension_settings if extension_settings.is_a?(Hash)
       rescue StandardError
         nil
       end
 
-      def derive_component_settings_key
+      def derive_component_settings_keys
+        key = respond_to?(:ancestors) ? ancestors.first : self.class
+        parts = key.to_s.split('::')
+        parts.shift if parts.first == 'Legion'
+
+        if parts.first == 'Extensions'
+          parts.shift
+          ext_parts = parts.take_while { |p| !COMPONENT_MAP.key?(p.downcase) }
+          return ext_parts.map { |p| camelize_to_snake_key(p).to_sym } if ext_parts.any?
+        elsif parts.first && !parts.first.start_with?('#')
+          return [camelize_to_snake_key(parts.first).to_sym]
+        end
+
         base = log_name
         return unless base
 
-        base.to_s.tr('-', '_').to_sym
+        base.to_s.split('-').map { |s| s.tr('-', '_').to_sym }
       rescue StandardError
         nil
+      end
+
+      def camelize_to_snake_key(str)
+        str.to_s
+           .gsub(/([A-Z]+)([A-Z][a-z])/, '\1_\2')
+           .gsub(/([a-z\d])([A-Z])/, '\1_\2')
+           .downcase
+      end
+
+      def dig_settings(hash, keys)
+        keys.reduce(hash) do |current, key|
+          return nil unless current.is_a?(Hash)
+
+          current[key] || current[key.to_s]
+        end
       end
 
       def global_log_level

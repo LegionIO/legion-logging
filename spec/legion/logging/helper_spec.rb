@@ -10,13 +10,9 @@ RSpec.describe Legion::Logging::Helper do
   end
 
   let(:lex_filename_class) do
-    Class.new do
+    stub_const('Legion::Extensions::Agentic::Memory::Runners::Store', Class.new do
       include Legion::Logging::Helper
-
-      def lex_filename
-        'microsoft_teams'
-      end
-    end
+    end)
   end
 
   let(:settings_class) do
@@ -201,22 +197,24 @@ RSpec.describe Legion::Logging::Helper do
       expect(logger.trace_enabled).to be false
     end
 
-    it 'uses Legion::Settings extension log_level for lex-style components' do
+    it 'uses Legion::Settings extension log_level for nested lex-style components' do
+      extensions_hash = { agentic: { memory: { log_level: 'warn', logger: { extended: false } } } }
       stub_const('Legion::Settings', Module.new do
+        define_method(:extensions_hash) { extensions_hash }
+
         def self.loaded? = true
 
         def self.[](key)
-          return nil unless key == :microsoft_teams
+          return @extensions_hash if key == :extensions
 
           nil
         end
 
-        def self.dig(*keys)
-          return { log_level: 'warn', logger: { extended: false } } if keys == %i[extensions microsoft_teams]
-
+        def self.dig(*)
           nil
         end
       end)
+      Legion::Settings.instance_variable_set(:@extensions_hash, extensions_hash)
 
       logger = lex_filename_class.new.log
 
@@ -547,9 +545,9 @@ RSpec.describe Legion::Logging::Helper do
   end
 
   describe '#log_name' do
-    it 'uses lex_filename when available' do
+    it 'falls back to first log segment for namespaced extensions' do
       obj = lex_filename_class.new
-      expect(obj.send(:log_name)).to eq('microsoft_teams')
+      expect(obj.send(:log_name)).to eq('agentic')
     end
 
     it 'falls back to first segment' do
