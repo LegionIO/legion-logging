@@ -88,7 +88,6 @@ module Legion
       end
 
       def with_entry_context(entry)
-        prev = []
         prev = THREAD_KEYS.map { |k| [k, Thread.current[k]] }
         Thread.current[:legion_log_segments]    = entry.segments
         Thread.current[:legion_log_method]      = entry.method_ctx
