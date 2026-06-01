@@ -98,7 +98,7 @@ module Legion
         Thread.current[:legion_log_chain_id]    = entry.chain_id
         yield
       ensure
-        prev.each { |k, v| Thread.current[k] = v }
+        prev&.each { |k, v| Thread.current[k] = v }
       end
 
       def drain
