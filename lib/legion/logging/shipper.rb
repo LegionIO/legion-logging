@@ -25,43 +25,49 @@ module Legion
         end
 
         def flush
-          return if @buffer.nil? || @buffer.empty?
+          @mutex ||= Mutex.new
+          batch = @mutex.synchronize do
+            return true if @buffer.nil? || @buffer.empty?
+
+            flushed = @buffer.dup
+            @buffer.clear
+            flushed
+          end
 
           transport = TRANSPORTS[transport_type]
-          return unless transport
+          return true unless transport
 
-          @flush_mutex ||= Mutex.new
-          @flush_mutex.synchronize do
-            batch = nil
-            @mutex.synchronize { batch = @buffer.dup }
-            return if batch.empty?
-
-            delivered = deliver(transport, batch)
-            @mutex.synchronize { @buffer.shift(batch.size) if delivered }
-            delivered
-          end
+          delivered = deliver(transport, batch)
+          @mutex.synchronize { @buffer.prepend(*batch) } unless delivered
+          delivered
         end
 
         def start
-          return unless enabled?
-          return if @flush_thread&.alive?
+          @start_mutex ||= Mutex.new
+          @start_mutex.synchronize do
+            return unless enabled?
+            return if @flush_thread&.alive?
 
-          @buffer ||= []
-          @mutex  ||= Mutex.new
-          @flush_mutex ||= Mutex.new
-          interval = flush_interval
-          @flush_thread = Thread.new do
-            loop do
-              sleep interval
-              flush
+            @buffer ||= []
+            @mutex  ||= Mutex.new
+            @running = true
+            interval = flush_interval
+            @flush_thread = Thread.new do
+              while @running
+                sleep interval
+                flush
+              end
             end
+            @flush_thread.name = 'legion-log-shipper'
+            @flush_thread.abort_on_exception = false
           end
-          @flush_thread.abort_on_exception = false
         end
 
         def stop
-          @flush_thread&.kill
+          @running = false
+          thread = @flush_thread
           @flush_thread = nil
+          thread&.join(5)
           flush
         end
 
@@ -74,8 +80,8 @@ module Legion
         private
 
         def buffer_event(event)
-          @buffer  ||= []
-          @mutex   ||= Mutex.new
+          @buffer ||= []
+          @mutex  ||= Mutex.new
 
           full = false
           @mutex.synchronize do

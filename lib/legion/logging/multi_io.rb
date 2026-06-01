@@ -10,6 +10,8 @@ module Legion
       def write(message)
         @targets.each do |t|
           t.write(message)
+        rescue StandardError => e
+          warn("Legion::Logging::MultiIO#write failed for #{t.class}: #{e.message}")
         end
       end
 

@@ -19,7 +19,7 @@ module Legion
         def fire(level, message, event)
           return unless @enabled
 
-          hooks_for(level).each do |hook|
+          hooks_for(level).dup.each do |hook|
             hook.call(message, event)
           rescue StandardError => e
             warn("Legion::Logging::Hooks#fire callback failed: #{e.message}")

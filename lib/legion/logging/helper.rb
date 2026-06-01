@@ -3,10 +3,13 @@
 require 'securerandom'
 require_relative 'tagged_logger'
 require_relative 'method_tracer'
+require_relative 'header_builder'
 
 module Legion
   module Logging
     module Helper
+      include Legion::Logging::HeaderBuilder
+
       SEGMENT_CACHE = {} # rubocop:disable Style/MutableConstant
       SEGMENT_CACHE_MUTEX = Mutex.new
       private_constant :SEGMENT_CACHE_MUTEX
@@ -32,7 +35,6 @@ module Legion
         'middleware' => :middleware
       }.freeze
 
-      EXCEPTION_PRIORITY = { warn: 0, error: 5, fatal: 9 }.freeze
       EXCEPTION_COLORS = {
         fatal:   :darkred,
         error:   :red,
@@ -359,25 +361,62 @@ module Legion
         return unless defined?(Legion::Settings)
         return unless Legion::Settings.respond_to?(:loaded?) ? Legion::Settings.loaded? : true
 
-        key = derive_component_settings_key
-        return unless key
+        keys = derive_component_settings_keys
+        return unless keys&.any?
 
-        top_level = Legion::Settings[key]
+        if keys.length > 1
+          result = dig_settings(Legion::Settings[:extensions], keys)
+          return result if result.is_a?(Hash)
+        end
+
+        single_key = keys.length == 1 ? keys.first : keys.join('_').to_sym
+        top_level = Legion::Settings[single_key]
         return top_level if top_level.is_a?(Hash)
 
-        extension_settings = Legion::Settings.dig(:extensions, key)
+        extension_settings = if keys.length > 1
+                               dig_settings(Legion::Settings[:extensions], keys)
+                             else
+                               Legion::Settings.dig(:extensions, single_key)
+                             end
         extension_settings if extension_settings.is_a?(Hash)
       rescue StandardError
         nil
       end
 
-      def derive_component_settings_key
+      def derive_component_settings_keys
+        key = respond_to?(:ancestors) ? ancestors.first : self.class
+        parts = key.to_s.split('::')
+        parts.shift if parts.first == 'Legion'
+
+        if parts.first == 'Extensions'
+          parts.shift
+          ext_parts = parts.take_while { |p| !COMPONENT_MAP.key?(p.downcase) }
+          return ext_parts.map { |p| camelize_to_snake_key(p).to_sym } if ext_parts.any?
+        elsif parts.first && !parts.first.start_with?('#')
+          return [camelize_to_snake_key(parts.first).to_sym]
+        end
+
         base = log_name
         return unless base
 
-        base.to_s.tr('-', '_').to_sym
+        base.to_s.split('-').map { |s| s.tr('-', '_').to_sym }
       rescue StandardError
         nil
+      end
+
+      def camelize_to_snake_key(str)
+        str.to_s
+           .gsub(/([A-Z]+)([A-Z][a-z])/, '\1_\2')
+           .gsub(/([a-z\d])([A-Z])/, '\1_\2')
+           .downcase
+      end
+
+      def dig_settings(hash, keys)
+        keys.reduce(hash) do |current, key|
+          return nil unless current.is_a?(Hash)
+
+          current[key] || current[key.to_s]
+        end
       end
 
       def global_log_level
@@ -468,15 +507,7 @@ module Legion
         Thread.current[:legion_log_segments] = segments
 
         message = format_exception_output(exception, event)
-        message = Legion::Logging::Redactor.redact_string(message) if defined?(Legion::Logging::Redactor) && redaction_enabled?
-        message = colorize_exception(message, level) if Legion::Logging.respond_to?(:color) && Legion::Logging.color
-
-        logger = Legion::Logging.respond_to?(:log) ? Legion::Logging.log : nil
-        if logger.respond_to?(level)
-          logger.public_send(level, message)
-        elsif Legion::Logging.respond_to?(level)
-          Legion::Logging.public_send(level, message)
-        end
+        Legion::Logging.public_send(level, message) if Legion::Logging.respond_to?(level)
       ensure
         Thread.current[:legion_log_segments] = prev_segs
       end
@@ -524,17 +555,6 @@ module Legion
         parts.join(' | ')
       end
 
-      def redaction_enabled?
-        return false unless defined?(Legion::Settings)
-
-        loader = Legion::Settings.instance_variable_get(:@loader)
-        return false unless loader
-
-        loader.dig(:logging, :redaction, :enabled) == true
-      rescue StandardError
-        false
-      end
-
       # -- Exception structured publish --
 
       def publish_exception(event, level)
@@ -555,85 +575,6 @@ module Legion
       def structured_exception_support?
         defined?(Legion::Logging::EventBuilder) &&
           Legion::Logging.respond_to?(:exception_writer)
-      end
-
-      def build_exception_headers(event, comp, level)
-        headers = {
-          'legion_protocol_version' => '2.0',
-          'x-error-fingerprint'     => event[:error_fingerprint],
-          'x-exception-class'       => event[:exception_class],
-          'x-handled'               => event[:handled].to_s,
-          'x-gem-name'              => event[:gem_name].to_s,
-          'x-lex-version'           => event[:lex_version].to_s,
-          'x-component-type'        => comp.to_s,
-          'x-level'                 => level.to_s
-        }
-        append_legion_version_header(headers)
-        headers['x-task-id'] = event[:task_id].to_s if event[:task_id]
-        headers['x-conversation-id'] = event[:conversation_id].to_s if event[:conversation_id]
-        headers['x-chain-id'] = event[:chain_id].to_s if event[:chain_id]
-        headers['x-user'] = event[:user].to_s if event[:user]
-        append_identity_headers(headers)
-        headers
-      end
-
-      def append_identity_headers(headers)
-        return unless defined?(Legion::Identity::Process)
-        return if Legion::Identity::Process.respond_to?(:resolved?) && !Legion::Identity::Process.resolved?
-
-        id = identity_hash
-        append_optional_header(headers, 'x-legion-identity-canonical-name', id[:canonical_name])
-        append_optional_header(headers, 'x-legion-identity-trust', id[:trust])
-        append_optional_header(headers, 'x-legion-identity-id', id[:id])
-        append_optional_header(headers, 'x-legion-identity-kind', id[:kind])
-        append_optional_header(headers, 'x-legion-identity-mode', id[:mode])
-        append_optional_header(headers, 'x-legion-identity-source', id[:source])
-        headers['x-legion-identity-db-principal-id'] = id[:db_principal_id] if id[:db_principal_id]
-        headers['x-legion-identity-db-identity-id'] = id[:db_identity_id] if id[:db_identity_id]
-      rescue StandardError
-        nil
-      end
-
-      def append_optional_header(headers, key, value)
-        return if value.nil?
-        return if value.respond_to?(:empty?) && value.empty?
-
-        headers[key] = value.to_s
-      end
-
-      def append_legion_version_header(headers)
-        append_optional_header(headers, 'x-legion-version', Legion::VERSION) if defined?(Legion::VERSION)
-      end
-
-      def identity_hash
-        process = Legion::Identity::Process
-        return process.identity_hash if process.respond_to?(:identity_hash)
-
-        {
-          canonical_name: identity_value(process, :canonical_name),
-          id:             identity_value(process, :id),
-          kind:           identity_value(process, :kind),
-          mode:           identity_value(process, :mode),
-          source:         identity_value(process, :source),
-          trust:          identity_value(process, :trust)
-        }
-      end
-
-      def identity_value(process, method_name)
-        process.public_send(method_name) if process.respond_to?(method_name)
-      end
-
-      def build_exception_properties(event, level)
-        {
-          content_type:   'application/json',
-          message_id:     SecureRandom.uuid,
-          correlation_id: event[:error_fingerprint],
-          timestamp:      Time.now.to_i,
-          app_id:         'legionio',
-          type:           'exception_event',
-          priority:       EXCEPTION_PRIORITY[level] || 5,
-          delivery_mode:  2
-        }
       end
     end
   end

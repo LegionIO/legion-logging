@@ -1,5 +1,15 @@
 # Legion::Logging Changelog
 
+## [1.5.6] - 2026-06-01
+
+### Added
+- `task_id:`, `conv_id:`, `request_id:` optional kwargs on all log level methods (`.debug`, `.info`, `.warn`, `.error`, `.fatal`, `.unknown`) in both `Methods` and `TaggedLogger`
+- Text formatter appends context ID (`conv_id` or `task_id` fallback) as `{conv_12345}` after the method segment in the prefix
+- Text formatter inserts `request_id=<value>` between severity and message when present
+- JSON formatter includes `conversation_id` and `request_id` fields when present
+- `AsyncWriter::LogEntry` carries `conv_id` and `request_id` for correct propagation to the writer thread
+- Thread-local `legion_log_conv_id` and `legion_log_request_id` for block-scoped context without per-call kwargs
+
 ## [1.5.5] - 2026-05-27
 
 ### Fixed
