@@ -32,44 +32,44 @@ module Legion
         @level_value
       end
 
-      def debug(message = nil, task_id: nil, conv_id: nil, request_id: nil)
+      def debug(message = nil, **ctx)
         return unless @level_value < 1
 
         message = yield if message.nil? && block_given?
-        with_segments { dispatch(:debug, message, task_id: task_id, conv_id: conv_id, request_id: request_id) }
+        with_segments { dispatch(:debug, message, **ctx) }
       end
 
-      def info(message = nil, task_id: nil, conv_id: nil, request_id: nil)
+      def info(message = nil, **ctx)
         return unless @level_value < 2
 
         message = yield if message.nil? && block_given?
-        with_segments { dispatch(:info, message, task_id: task_id, conv_id: conv_id, request_id: request_id) }
+        with_segments { dispatch(:info, message, **ctx) }
       end
 
-      def warn(message = nil, task_id: nil, conv_id: nil, request_id: nil)
+      def warn(message = nil, **ctx)
         return unless @level_value < 3
 
         message = yield if message.nil? && block_given?
-        with_segments { dispatch(:warn, message, task_id: task_id, conv_id: conv_id, request_id: request_id) }
+        with_segments { dispatch(:warn, message, **ctx) }
       end
 
-      def error(message = nil, task_id: nil, conv_id: nil, request_id: nil)
+      def error(message = nil, **ctx)
         return unless @level_value < 4
 
         message = yield if message.nil? && block_given?
-        with_segments { dispatch(:error, message, task_id: task_id, conv_id: conv_id, request_id: request_id) }
+        with_segments { dispatch(:error, message, **ctx) }
       end
 
-      def fatal(message = nil, task_id: nil, conv_id: nil, request_id: nil)
+      def fatal(message = nil, **ctx)
         return unless @level_value < 5
 
         message = yield if message.nil? && block_given?
-        with_segments { dispatch(:fatal, message, task_id: task_id, conv_id: conv_id, request_id: request_id) }
+        with_segments { dispatch(:fatal, message, **ctx) }
       end
 
-      def unknown(message = nil, task_id: nil, conv_id: nil, request_id: nil)
+      def unknown(message = nil, **ctx)
         message = yield if message.nil? && block_given?
-        with_segments { dispatch(:unknown, message, task_id: task_id, conv_id: conv_id, request_id: request_id) }
+        with_segments { dispatch(:unknown, message, **ctx) }
       end
 
       def trace(raw_message = nil, size: @trace_size, log_caller: true)
@@ -94,23 +94,23 @@ module Legion
 
       private
 
-      def dispatch(level, message, task_id: nil, conv_id: nil, request_id: nil)
+      def dispatch(level, message, **ctx)
         return unless defined?(Legion::Logging)
 
         if Legion::Logging.respond_to?(:emit_tagged)
-          Legion::Logging.emit_tagged(level, message, segments: @segments, task_id: task_id, conv_id: conv_id, request_id: request_id)
+          Legion::Logging.emit_tagged(level, message, segments: @segments, **ctx)
           return
         end
 
         if Legion::Logging.respond_to?(level)
-          Legion::Logging.public_send(level, message, task_id: task_id, conv_id: conv_id, request_id: request_id)
+          Legion::Logging.public_send(level, message, **ctx)
           return
         end
 
         fallback = fallback_level(level)
         return unless fallback && Legion::Logging.respond_to?(fallback)
 
-        Legion::Logging.public_send(fallback, message, task_id: task_id, conv_id: conv_id, request_id: request_id)
+        Legion::Logging.public_send(fallback, message, **ctx)
       end
 
       def fallback_level(level)

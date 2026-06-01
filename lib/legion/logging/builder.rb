@@ -35,6 +35,10 @@ module Legion
           entry[:conversation_id] = conv_id if conv_id.is_a?(String) && !conv_id.empty?
           request_id = Thread.current[:legion_log_request_id]
           entry[:request_id] = request_id if request_id.is_a?(String) && !request_id.empty?
+          exchange_id = Thread.current[:legion_log_exchange_id]
+          entry[:exchange_id] = exchange_id if exchange_id.is_a?(String) && !exchange_id.empty?
+          chain_id = Thread.current[:legion_log_chain_id]
+          entry[:chain_id] = chain_id if chain_id.is_a?(String) && !chain_id.empty?
           "#{::JSON.generate(entry)}\n"
         rescue StandardError => e
           warn("Legion::Logging::Builder#json_format formatter failed: #{e.message}")
@@ -53,11 +57,11 @@ module Legion
           if runner_trace.is_a?(Hash) && (options[:extended] || severity == 'debug')
             string.concat("[#{runner_trace[:type]}:#{runner_trace[:file]}:#{runner_trace[:function]}:#{runner_trace[:line_number]}]")
           end
-          request_id = Thread.current[:legion_log_request_id]
-          if request_id.is_a?(String) && !request_id.empty?
-            string.concat(" #{severity} request_id=#{request_id} #{msg}\n")
-          else
+          ctx_pairs = build_context_kv_pairs
+          if ctx_pairs.empty?
             string.concat(" #{severity} #{msg}\n")
+          else
+            string.concat(" #{severity} #{ctx_pairs} #{msg}\n")
           end
           string
         end
@@ -79,6 +83,17 @@ module Legion
         context_id = Thread.current[:legion_log_conv_id]
         tag = "#{tag}{#{context_id}}" if tag && context_id.is_a?(String) && !context_id.empty?
         tag
+      end
+
+      def build_context_kv_pairs
+        pairs = []
+        request_id = Thread.current[:legion_log_request_id]
+        pairs << "request_id=#{request_id}" if request_id.is_a?(String) && !request_id.empty?
+        exchange_id = Thread.current[:legion_log_exchange_id]
+        pairs << "exchange_id=#{exchange_id}" if exchange_id.is_a?(String) && !exchange_id.empty?
+        chain_id = Thread.current[:legion_log_chain_id]
+        pairs << "chain_id=#{chain_id}" if chain_id.is_a?(String) && !chain_id.empty?
+        pairs.join(' ')
       end
 
       def build_runner_trace(loc = caller_locations(6, 1)&.first)

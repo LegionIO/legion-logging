@@ -26,71 +26,78 @@ module Legion
         log.unknown(message)
       end
 
-      def debug(message = nil, task_id: nil, conv_id: nil, request_id: nil)
+      def debug(message = nil, task_id: nil, conv_id: nil, request_id: nil, exchange_id: nil, chain_id: nil, **_ctx)
         return unless log.level < 1
 
         message = yield if message.nil? && block_given?
         raw = maybe_redact(message)
         formatted = format_message_for_level(:debug, raw)
-        with_context_ids(task_id: task_id, conv_id: conv_id, request_id: request_id) do
+        with_context_ids(task_id: task_id, conv_id: conv_id, request_id: request_id,
+                         exchange_id: exchange_id, chain_id: chain_id) do
           write_async_or_sync(:debug, formatted, raw)
         end
       end
 
-      def info(message = nil, task_id: nil, conv_id: nil, request_id: nil)
+      def info(message = nil, task_id: nil, conv_id: nil, request_id: nil, exchange_id: nil, chain_id: nil, **_ctx)
         return unless log.level < 2
 
         message = yield if message.nil? && block_given?
         raw = maybe_redact(message)
         formatted = format_message_for_level(:info, raw)
-        with_context_ids(task_id: task_id, conv_id: conv_id, request_id: request_id) do
+        with_context_ids(task_id: task_id, conv_id: conv_id, request_id: request_id,
+                         exchange_id: exchange_id, chain_id: chain_id) do
           write_async_or_sync(:info, formatted, raw)
         end
       end
 
-      def warn(message = nil, task_id: nil, conv_id: nil, request_id: nil)
+      def warn(message = nil, task_id: nil, conv_id: nil, request_id: nil, exchange_id: nil, chain_id: nil, **_ctx)
         return unless log.level < 3
 
         message = yield if message.nil? && block_given?
         raw = maybe_redact(message)
         formatted = format_message_for_level(:warn, raw)
-        with_context_ids(task_id: task_id, conv_id: conv_id, request_id: request_id) do
+        with_context_ids(task_id: task_id, conv_id: conv_id, request_id: request_id,
+                         exchange_id: exchange_id, chain_id: chain_id) do
           write_async_or_sync(:warn, formatted, raw, writer_context: build_writer_context(:warn, raw))
         end
       end
 
-      def error(message = nil, task_id: nil, conv_id: nil, request_id: nil)
+      def error(message = nil, task_id: nil, conv_id: nil, request_id: nil, exchange_id: nil, chain_id: nil, **_ctx)
         return unless log.level < 4
 
         message = yield if message.nil? && block_given?
         raw = maybe_redact(message)
         formatted = format_message_for_level(:error, raw)
-        with_context_ids(task_id: task_id, conv_id: conv_id, request_id: request_id) do
+        with_context_ids(task_id: task_id, conv_id: conv_id, request_id: request_id,
+                         exchange_id: exchange_id, chain_id: chain_id) do
           write_async_or_sync(:error, formatted, raw, writer_context: build_writer_context(:error, raw))
         end
       end
 
-      def fatal(message = nil, task_id: nil, conv_id: nil, request_id: nil)
+      def fatal(message = nil, task_id: nil, conv_id: nil, request_id: nil, exchange_id: nil, chain_id: nil, **_ctx)
         return unless log.level < 5
 
         message = yield if message.nil? && block_given?
         raw = maybe_redact(message)
         formatted = format_message_for_level(:fatal, raw)
-        with_context_ids(task_id: task_id, conv_id: conv_id, request_id: request_id) do
+        with_context_ids(task_id: task_id, conv_id: conv_id, request_id: request_id,
+                         exchange_id: exchange_id, chain_id: chain_id) do
           write_async_or_sync(:fatal, formatted, raw, writer_context: build_writer_context(:fatal, raw))
         end
       end
 
-      def unknown(message = nil, task_id: nil, conv_id: nil, request_id: nil)
+      def unknown(message = nil, task_id: nil, conv_id: nil, request_id: nil, exchange_id: nil, chain_id: nil, **_ctx)
         message = yield if message.nil? && block_given?
         raw = maybe_redact(message)
         formatted = format_message_for_level(:unknown, raw)
-        with_context_ids(task_id: task_id, conv_id: conv_id, request_id: request_id) do
+        with_context_ids(task_id: task_id, conv_id: conv_id, request_id: request_id,
+                         exchange_id: exchange_id, chain_id: chain_id) do
           write_async_or_sync(:unknown, formatted, raw)
         end
       end
 
-      def emit_tagged(level, message = nil, segments: nil, method_ctx: nil, task_id: nil, conv_id: nil, request_id: nil)
+      def emit_tagged(level, message = nil, segments: nil, method_ctx: nil,
+                      task_id: nil, conv_id: nil, request_id: nil, exchange_id: nil, chain_id: nil, **_ctx)
         level = level.to_sym
         message = yield if message.nil? && block_given?
         return if message.nil?
@@ -99,7 +106,8 @@ module Legion
         formatted = format_message_for_level(level, raw)
 
         with_tagged_context(segments, method_ctx) do
-          with_context_ids(task_id: task_id, conv_id: conv_id, request_id: request_id) do
+          with_context_ids(task_id: task_id, conv_id: conv_id, request_id: request_id,
+                           exchange_id: exchange_id, chain_id: chain_id) do
             ctx = %i[warn error fatal].include?(level) ? build_writer_context(level, raw) : nil
             writer = @async_writer
             caller_trace = capture_runner_trace_for_async
@@ -110,7 +118,9 @@ module Legion
                             method_ctx: Thread.current[:legion_log_method],
                             caller_trace: caller_trace,
                             conv_id: Thread.current[:legion_log_conv_id],
-                            request_id: Thread.current[:legion_log_request_id]
+                            request_id: Thread.current[:legion_log_request_id],
+                            exchange_id: Thread.current[:legion_log_exchange_id],
+                            chain_id: Thread.current[:legion_log_chain_id]
                           ))
             else
               with_caller_trace(caller_trace) { write_forced(level, formatted) }
@@ -253,19 +263,27 @@ module Legion
         level.to_s.upcase
       end
 
-      def with_context_ids(task_id: nil, conv_id: nil, request_id: nil)
-        prev_conv = Thread.current[:legion_log_conv_id]
-        prev_req = Thread.current[:legion_log_request_id]
+      def with_context_ids(task_id: nil, conv_id: nil, request_id: nil, exchange_id: nil, chain_id: nil)
+        prev_conv     = Thread.current[:legion_log_conv_id]
+        prev_req      = Thread.current[:legion_log_request_id]
+        prev_exchange = Thread.current[:legion_log_exchange_id]
+        prev_chain    = Thread.current[:legion_log_chain_id]
 
         context_id = conv_id || task_id || Thread.current[:legion_log_conv_id]
         req_id = request_id || Thread.current[:legion_log_request_id]
+        exch_id = exchange_id || Thread.current[:legion_log_exchange_id]
+        ch_id = chain_id || Thread.current[:legion_log_chain_id]
 
-        Thread.current[:legion_log_conv_id] = context_id if context_id.is_a?(String) && !context_id.empty?
-        Thread.current[:legion_log_request_id] = req_id if req_id.is_a?(String) && !req_id.empty?
+        Thread.current[:legion_log_conv_id]     = context_id if context_id.is_a?(String) && !context_id.empty?
+        Thread.current[:legion_log_request_id]  = req_id if req_id.is_a?(String) && !req_id.empty?
+        Thread.current[:legion_log_exchange_id] = exch_id if exch_id.is_a?(String) && !exch_id.empty?
+        Thread.current[:legion_log_chain_id]    = ch_id if ch_id.is_a?(String) && !ch_id.empty?
         yield
       ensure
-        Thread.current[:legion_log_conv_id] = prev_conv
-        Thread.current[:legion_log_request_id] = prev_req
+        Thread.current[:legion_log_conv_id]     = prev_conv
+        Thread.current[:legion_log_request_id]  = prev_req
+        Thread.current[:legion_log_exchange_id] = prev_exchange
+        Thread.current[:legion_log_chain_id]    = prev_chain
       end
 
       def write_async_or_sync(level, formatted_message, raw_message, writer_context: nil)
@@ -280,7 +298,9 @@ module Legion
                                  method_ctx:     Thread.current[:legion_log_method],
                                  caller_trace:   caller_trace,
                                  conv_id:        Thread.current[:legion_log_conv_id],
-                                 request_id:     Thread.current[:legion_log_request_id]
+                                 request_id:     Thread.current[:legion_log_request_id],
+                                 exchange_id:    Thread.current[:legion_log_exchange_id],
+                                 chain_id:       Thread.current[:legion_log_chain_id]
                                ))
           return if queued
         end
