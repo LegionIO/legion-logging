@@ -54,7 +54,7 @@ RSpec.describe Legion::Logging::AsyncWriter do
       writer.start
       writer.push(Legion::Logging::AsyncWriter::LogEntry.new(
                     level: :info, message: 'blocked', writer_context: nil, segments: nil, method_ctx: nil,
-                    caller_trace: nil
+                    caller_trace: nil, conv_id: nil, request_id: nil
                   ))
 
       start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
@@ -74,7 +74,7 @@ RSpec.describe Legion::Logging::AsyncWriter do
 
     it 'writes entries to the logger' do
       entry = Legion::Logging::AsyncWriter::LogEntry.new(
-        level: :info, message: 'async test', writer_context: nil, segments: nil, method_ctx: nil, caller_trace: nil
+        level: :info, message: 'async test', writer_context: nil, segments: nil, method_ctx: nil, caller_trace: nil, conv_id: nil, request_id: nil
       )
       subject.push(entry)
       subject.stop
@@ -87,7 +87,7 @@ RSpec.describe Legion::Logging::AsyncWriter do
       3.times do |i|
         subject.push(Legion::Logging::AsyncWriter::LogEntry.new(
                        level: :info, message: "msg-#{i}", writer_context: nil, segments: nil, method_ctx: nil,
-                       caller_trace: nil
+                       caller_trace: nil, conv_id: nil, request_id: nil
                      ))
       end
       subject.stop
@@ -105,7 +105,7 @@ RSpec.describe Legion::Logging::AsyncWriter do
       end
 
       entry = Legion::Logging::AsyncWriter::LogEntry.new(
-        level: :info, message: 'slow message', writer_context: nil, segments: nil, method_ctx: nil, caller_trace: nil
+        level: :info, message: 'slow message', writer_context: nil, segments: nil, method_ctx: nil, caller_trace: nil, conv_id: nil, request_id: nil
       )
 
       subject.push(entry)
@@ -123,7 +123,7 @@ RSpec.describe Legion::Logging::AsyncWriter do
       2.times do |i|
         subject.push(Legion::Logging::AsyncWriter::LogEntry.new(
                        level: :info, message: "fill-#{i}", writer_context: nil, segments: nil, method_ctx: nil,
-                       caller_trace: nil
+                       caller_trace: nil, conv_id: nil, request_id: nil
                      ))
       end
 
@@ -131,7 +131,7 @@ RSpec.describe Legion::Logging::AsyncWriter do
       pusher = Thread.new do
         subject.push(Legion::Logging::AsyncWriter::LogEntry.new(
                        level: :info, message: 'overflow', writer_context: nil, segments: nil, method_ctx: nil,
-                       caller_trace: nil
+                       caller_trace: nil, conv_id: nil, request_id: nil
                      ))
         blocked = false
       end
@@ -155,7 +155,7 @@ RSpec.describe Legion::Logging::AsyncWriter do
       5.times do |i|
         subject.push(Legion::Logging::AsyncWriter::LogEntry.new(
                        level: :warn, message: "drain-#{i}", writer_context: nil, segments: nil, method_ctx: nil,
-                       caller_trace: nil
+                       caller_trace: nil, conv_id: nil, request_id: nil
                      ))
       end
       subject.stop
@@ -179,7 +179,7 @@ RSpec.describe Legion::Logging::AsyncWriter do
       entry = Legion::Logging::AsyncWriter::LogEntry.new(
         level: :error, message: 'writer test',
         writer_context: { level: :error, event: event },
-        segments: nil, method_ctx: nil, caller_trace: nil
+        segments: nil, method_ctx: nil, caller_trace: nil, conv_id: nil, request_id: nil
       )
       subject.push(entry)
       deadline = Time.now + 2
@@ -196,7 +196,7 @@ RSpec.describe Legion::Logging::AsyncWriter do
 
     it 'is a frozen Data struct' do
       entry = Legion::Logging::AsyncWriter::LogEntry.new(
-        level: :info, message: 'test', writer_context: nil, segments: nil, method_ctx: nil, caller_trace: nil
+        level: :info, message: 'test', writer_context: nil, segments: nil, method_ctx: nil, caller_trace: nil, conv_id: nil, request_id: nil
       )
       expect(entry).to be_frozen
     end

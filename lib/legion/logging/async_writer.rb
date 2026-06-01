@@ -5,7 +5,7 @@ require_relative 'methods'
 module Legion
   module Logging
     class AsyncWriter
-      LogEntry = ::Data.define(:level, :message, :writer_context, :segments, :method_ctx, :caller_trace)
+      LogEntry = ::Data.define(:level, :message, :writer_context, :segments, :method_ctx, :caller_trace, :conv_id, :request_id)
       SHUTDOWN = :shutdown
 
       attr_reader :logger
@@ -77,17 +77,23 @@ module Legion
         prev_segments   = Thread.current[:legion_log_segments]
         prev_method_ctx = Thread.current[:legion_log_method]
         prev_caller     = Thread.current[:legion_log_caller]
-        Thread.current[:legion_log_segments] = entry.segments
-        Thread.current[:legion_log_method]   = entry.method_ctx
-        Thread.current[:legion_log_caller]   = entry.caller_trace
+        prev_conv_id    = Thread.current[:legion_log_conv_id]
+        prev_request_id = Thread.current[:legion_log_request_id]
+        Thread.current[:legion_log_segments]   = entry.segments
+        Thread.current[:legion_log_method]     = entry.method_ctx
+        Thread.current[:legion_log_caller]     = entry.caller_trace
+        Thread.current[:legion_log_conv_id]    = entry.conv_id
+        Thread.current[:legion_log_request_id] = entry.request_id
         @logger.send(entry.level, entry.message)
         fire_writer(entry) if entry.writer_context
       rescue StandardError => e
         warn("legion-log-writer error: #{e.message} (#{e.backtrace&.first})")
       ensure
-        Thread.current[:legion_log_segments] = prev_segments
-        Thread.current[:legion_log_method]   = prev_method_ctx
-        Thread.current[:legion_log_caller]   = prev_caller
+        Thread.current[:legion_log_segments]   = prev_segments
+        Thread.current[:legion_log_method]     = prev_method_ctx
+        Thread.current[:legion_log_caller]     = prev_caller
+        Thread.current[:legion_log_conv_id]    = prev_conv_id
+        Thread.current[:legion_log_request_id] = prev_request_id
       end
 
       def drain

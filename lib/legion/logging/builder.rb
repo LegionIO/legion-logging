@@ -31,6 +31,10 @@ module Legion
           entry[:segments] = segments if segments
           method_ctx = Thread.current[:legion_log_method]
           entry[:method] = method_ctx if method_ctx
+          conv_id = Thread.current[:legion_log_conv_id]
+          entry[:conversation_id] = conv_id if conv_id.is_a?(String) && !conv_id.empty?
+          request_id = Thread.current[:legion_log_request_id]
+          entry[:request_id] = request_id if request_id.is_a?(String) && !request_id.empty?
           "#{::JSON.generate(entry)}\n"
         rescue StandardError => e
           warn("Legion::Logging::Builder#json_format formatter failed: #{e.message}")
@@ -49,7 +53,12 @@ module Legion
           if runner_trace.is_a?(Hash) && (options[:extended] || severity == 'debug')
             string.concat("[#{runner_trace[:type]}:#{runner_trace[:file]}:#{runner_trace[:function]}:#{runner_trace[:line_number]}]")
           end
-          string.concat(" #{severity} #{msg}\n")
+          request_id = Thread.current[:legion_log_request_id]
+          if request_id.is_a?(String) && !request_id.empty?
+            string.concat(" #{severity} request_id=#{request_id} #{msg}\n")
+          else
+            string.concat(" #{severity} #{msg}\n")
+          end
           string
         end
       end
@@ -66,6 +75,9 @@ module Legion
 
         method_ctx = Thread.current[:legion_log_method]
         tag = "#{tag}{#{method_ctx}}" if tag && method_ctx
+
+        context_id = Thread.current[:legion_log_conv_id]
+        tag = "#{tag}{#{context_id}}" if tag && context_id.is_a?(String) && !context_id.empty?
         tag
       end
 
