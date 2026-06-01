@@ -61,7 +61,7 @@ module Legion
           if ctx_pairs.empty?
             string.concat(" #{severity} #{msg}\n")
           else
-            string.concat(" #{severity} #{ctx_pairs} #{msg}\n")
+            string.concat(" #{severity} #{msg} #{ctx_pairs}\n")
           end
           string
         end
