@@ -340,6 +340,7 @@ RSpec.describe Legion::Logging::Helper do
       allow(Legion::Logging).to receive(:color).and_return(false)
       allow(Legion::Logging).to receive(:warn)
       allow(Legion::Logging).to receive(:exception_writer).and_return(->(_e, **_k) {})
+      allow(underlying_logger).to receive(:level).and_return(0)
       allow(underlying_logger).to receive(:error)
       allow(underlying_logger).to receive(:fatal)
     end
@@ -435,9 +436,12 @@ RSpec.describe Legion::Logging::Helper do
       around do |example|
         was_enabled = Rainbow.enabled
         Rainbow.enabled = true
+        prev_color = Legion::Logging.instance_variable_get(:@color)
+        Legion::Logging.instance_variable_set(:@color, true)
         example.run
       ensure
         Rainbow.enabled = was_enabled
+        Legion::Logging.instance_variable_set(:@color, prev_color)
       end
 
       before do
