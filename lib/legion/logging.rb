@@ -91,6 +91,7 @@ module Legion
           extended:    options.fetch(:extended, true),
           log_file:    options[:log_file],
           log_stdout:  options[:log_stdout],
+          rotation:    options[:rotation],
           include_pid: options.fetch(:include_pid, false),
           color:       @color
         }.freeze

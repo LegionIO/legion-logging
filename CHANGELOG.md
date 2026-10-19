@@ -1,5 +1,17 @@
 # Legion::Logging Changelog
 
+## [1.5.7] - 2026-10-19
+
+### Added
+- Size-based log rotation, on by default (100 MB x 5 archives), configurable via `logging.rotation`
+  (`enabled`, `max_size_mb`, `max_files`, `stdio`) or `setup(rotation: {...})`; `rotation: false` disables it
+- `Legion::Logging::RotatingFile`: self-rotating append-mode device used for `log_file:`; reopens if another
+  process rotated the path
+- `Legion::Logging::StdioRotator`: rotates the file behind stdout/stderr when a supervisor (launchd
+  `StandardOutPath`, systemd `append:`) redirected them to an append-mode regular file, using `IO#reopen` so
+  raw stderr output is captured in the new file too. Fixes unbounded growth of the Homebrew service log
+  (`/opt/homebrew/var/log/legion/legion.log` reached 25.8 GB)
+
 ## [1.5.6] - 2026-06-01
 
 ### Added

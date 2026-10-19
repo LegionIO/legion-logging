@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'fileutils'
+require_relative 'rotation'
 
 module Legion
   module Logging
@@ -109,33 +110,48 @@ module Legion
       end
 
       def output(**options)
-        set_log(logfile: options[:log_file], log_stdout: options[:log_stdout])
+        set_log(logfile: options[:log_file], log_stdout: options[:log_stdout], rotation: options[:rotation])
       end
 
       def log
         @log ||= set_log
       end
 
-      def set_log(logfile: nil, log_stdout: nil, **)
+      # rotation: nil reads Legion::Settings[:logging][:rotation]; false disables;
+      # a Hash overrides individual keys (see Legion::Logging::Rotation::DEFAULTS).
+      def set_log(logfile: nil, log_stdout: nil, rotation: nil, **)
         previous_log = @log
+        rotation_opts = Rotation.resolve(rotation.nil? ? Rotation.from_settings : rotation)
 
         if logfile && log_stdout != false
-          path = prepare_log_path(logfile)
           require_relative 'multi_io'
-          file = File.new(path, 'a')
-          file.sync = true
-          io = MultiIO.new($stdout, file)
+          io = MultiIO.new(stdout_target(rotation_opts), open_log_file(prepare_log_path(logfile), rotation_opts))
           @log = ::Logger.new(io)
         elsif logfile
-          file = File.new(prepare_log_path(logfile), 'a')
-          file.sync = true
-          @log = ::Logger.new(file)
+          @log = ::Logger.new(open_log_file(prepare_log_path(logfile), rotation_opts))
         else
-          @log = ::Logger.new($stdout)
+          @log = ::Logger.new(stdout_target(rotation_opts))
         end
 
         close_replaced_log(previous_log)
         @log
+      end
+
+      def open_log_file(path, rotation_opts)
+        return RotatingFile.new(path, max_bytes: rotation_opts[:max_bytes], max_files: rotation_opts[:max_files]) if rotation_opts[:enabled]
+
+        file = File.new(path, 'a')
+        file.sync = true
+        file
+      end
+
+      # When a supervisor (launchd/systemd/nohup) redirected stdout to a regular
+      # file, wrap it so that file is rotated by size too.
+      def stdout_target(rotation_opts)
+        return $stdout unless rotation_opts[:enabled] && rotation_opts[:stdio]
+        return $stdout unless Rotation.regular_file_path($stdout)
+
+        StdioRotator.shared(max_bytes: rotation_opts[:max_bytes], max_files: rotation_opts[:max_files])
       end
 
       def prepare_log_path(path)

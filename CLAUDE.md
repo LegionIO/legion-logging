@@ -3,7 +3,7 @@
 Structured logging framework for LegionIO. Provides colorized console output (Rainbow), structured JSON logging, and a consistent interface across all Legion gems and extensions.
 
 **GitHub**: https://github.com/LegionIO/legion-logging
-**Version**: 1.5.3
+**Version**: 1.5.7
 
 ## Architecture
 
@@ -20,7 +20,8 @@ Legion::Logging (singleton module)
 ├── SIEMExporter      # PHI-redacting SIEM export (Splunk HEC, ELK)
 ├── Shipper           # Buffered forwarding (FileTransport, HttpTransport)
 ├── Redactor          # PII/PHI + secret pattern redaction (opt-in)
-└── MultiIO           # Write to multiple destinations simultaneously
+├── MultiIO           # Write to multiple destinations simultaneously
+└── Rotation          # Size-based rotation: RotatingFile (log_file) + StdioRotator (launchd/systemd stdout)
 
 # Module-level writer lambdas (pluggable forwarding slots)
 Legion::Logging.log_writer       # ->(event, routing_key:) {}

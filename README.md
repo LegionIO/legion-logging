@@ -31,6 +31,26 @@ Legion::Logging.error('something went wrong')
 Legion::Logging.fatal('critical failure')
 ```
 
+### Log Rotation
+
+File output is rotated by size (default **100 MB x 5 archives**: `legion.log`, `legion.log.1` .. `legion.log.5`).
+This covers both `log_file:` and the case where a supervisor (launchd `StandardOutPath`, systemd `append:`, `>>`)
+redirected stdout/stderr to a file: the process renames the file and reopens fd 1/2 on a fresh one, so raw stderr
+output (thread crashes, C extension warnings) rotates too. Non-append redirects (`>`) and pipes are left alone.
+
+```json
+{
+  "logging": {
+    "rotation": { "enabled": true, "max_size_mb": 100, "max_files": 5, "stdio": true }
+  }
+}
+```
+
+```ruby
+Legion::Logging.setup(log_file: './legion.log', rotation: { max_size_mb: 50, max_files: 3 })
+Legion::Logging.setup(log_file: './legion.log', rotation: false) # disable
+```
+
 ### Async Logging
 
 By default, `setup` enables async logging — log calls push to a background writer thread and return immediately. Fatal calls always bypass the queue and write synchronously.
