@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'json'
 require_relative 'methods'
 
 module Legion
@@ -57,6 +58,8 @@ module Legion
       end
 
       def push(entry)
+        return write_reentrant_entry(entry) if current_thread?
+
         return false unless accepting?
 
         @queue.push(entry)
@@ -85,7 +88,7 @@ module Legion
         end
       end
 
-      def write_entry(entry)
+      def write_entry(entry, forward: true)
         if entry.is_a?(EventEntry)
           entry.callback.call(entry.event, **entry.options)
           return
@@ -96,11 +99,25 @@ module Legion
             entry.severity.nil? ? @logger << entry.message : @logger.add(entry.severity, entry.message, entry.progname)
           else
             @logger.send(entry.level, entry.message)
-            fire_writer(entry) if entry.writer_context
+            fire_writer(entry) if forward && entry.writer_context
           end
         end
       rescue StandardError => e
         warn("legion-log-writer error: #{e.message} (#{e.backtrace&.first})")
+      end
+
+      def write_reentrant_entry(entry)
+        previous = @reentrant_write
+        @reentrant_write = true
+        if previous || entry.is_a?(EventEntry)
+          event = entry.is_a?(EventEntry) ? entry.event : { message: entry.message.to_s }
+          @logger << "#{::JSON.generate(event)}\n"
+        else
+          write_entry(entry, forward: false)
+        end
+        true
+      ensure
+        @reentrant_write = previous
       end
 
       def with_entry_context(entry)

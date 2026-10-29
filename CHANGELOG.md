@@ -1,5 +1,11 @@
 # Legion::Logging Changelog
 
+## [1.5.10] - 2026-10-29
+
+### Fixed
+- Prevent writer callbacks and hooks from waiting on their own full queue: nested messages are written locally on the writer without recursively forwarding them (#22).
+- Preserve nested exception events as local JSON lines and bypass recursive formatting when necessary, without growing an overflow queue or dropping nested messages.
+
 ## [1.5.9] - 2026-10-29
 
 ### Fixed
