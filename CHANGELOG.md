@@ -1,5 +1,11 @@
 # Legion::Logging Changelog
 
+## [1.5.8] - 2026-10-29
+
+### Fixed
+- Queue structured exception publication for both `log_exception` and Helper `handle_exception`, keeping exception-writer callbacks off producer threads when async logging is enabled (#22).
+- Preserve captured exception metadata and callback envelopes while retaining synchronous publication for explicit synchronous logging.
+
 ## [1.5.7] - 2026-10-29
 
 ### Changed

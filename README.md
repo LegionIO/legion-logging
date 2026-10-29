@@ -2,7 +2,7 @@
 
 Logging module for the [LegionIO](https://github.com/LegionIO/LegionIO) framework. Provides colorized console output via Rainbow, structured JSON logging, multi-output IO, and a consistent logging interface across all Legion gems and extensions.
 
-**Version**: 1.5.7
+**Version**: 1.5.8
 
 ## Installation
 
@@ -98,7 +98,7 @@ end
 
 ### Exception Logging
 
-`log_exception` provides a single call for complete exception logging with component context. It writes a human-readable exception line through the configured logger and publishes a structured exception event when an `exception_writer` is configured.
+`log_exception` provides a single call for complete exception logging with component context. It writes a human-readable exception line and publishes a structured exception event when an `exception_writer` is configured. With async logging enabled, both output and exception publication run on the writer thread; Helper `handle_exception` uses the same publication path. Bounded queue backpressure still applies.
 
 ```ruby
 begin
@@ -114,7 +114,7 @@ rescue StandardError => e
 end
 ```
 
-The synchronous log line includes the full Ruby backtrace. Legion does not truncate it to a fixed frame count or replace the tail with `... N more`, because the missing frames are often the useful part of production failures.
+The human-readable log line includes the full Ruby backtrace unless `backtrace_limit` is configured. Legion does not replace the tail with `... N more`.
 
 Structured exception events include:
 

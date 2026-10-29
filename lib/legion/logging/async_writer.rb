@@ -7,6 +7,7 @@ module Legion
     class AsyncWriter
       LogEntry = ::Data.define(:level, :message, :writer_context, :segments, :method_ctx, :caller_trace,
                                :conv_id, :request_id, :exchange_id, :chain_id)
+      EventEntry = ::Data.define(:callback, :event, :options)
       SHUTDOWN = :shutdown
       THREAD_KEYS = %i[
         legion_log_segments legion_log_method legion_log_caller
@@ -79,6 +80,11 @@ module Legion
       end
 
       def write_entry(entry)
+        if entry.is_a?(EventEntry)
+          entry.callback.call(entry.event, **entry.options)
+          return
+        end
+
         with_entry_context(entry) do
           @logger.send(entry.level, entry.message)
           fire_writer(entry) if entry.writer_context

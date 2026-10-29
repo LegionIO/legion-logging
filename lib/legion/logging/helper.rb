@@ -101,7 +101,7 @@ module Legion
         event = Legion::Logging::Redactor.redact(event) if defined?(Legion::Logging::Redactor)
 
         write_exception_to_log(exception, event, level, segments)
-        publish_exception(event, level) if structured_exception_support?
+        Legion::Logging.publish_exception(event: event, level: level) if structured_exception_support?
       end
 
       def self.included(base)
@@ -553,23 +553,6 @@ module Legion
         parts << "conversation:#{event[:conversation_id]}" if event[:conversation_id]
         parts << "chain:#{event[:chain_id]}" if event[:chain_id]
         parts.join(' | ')
-      end
-
-      # -- Exception structured publish --
-
-      def publish_exception(event, level)
-        return unless structured_exception_support?
-
-        lex_name = event[:lex] || 'core'
-        comp = event[:component_type] || :unknown
-        routing_key = "legion.logging.exception.#{level}.#{lex_name}.#{comp}"
-
-        headers = build_exception_headers(event, comp, level)
-        properties = build_exception_properties(event, level)
-
-        Legion::Logging.exception_writer.call(event, routing_key: routing_key, headers: headers, properties: properties)
-      rescue StandardError => e
-        Legion::Logging.warn("Failed to publish exception event: #{e.class}: #{e.message}") if Legion::Logging.respond_to?(:warn)
       end
 
       def structured_exception_support?

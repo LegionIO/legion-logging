@@ -170,13 +170,28 @@ module Legion
         event = Legion::Logging::Redactor.redact(event) if defined?(Legion::Logging::Redactor)
 
         # 4. Publish rich event via exception_writer
-        publish_exception_event(event, level)
+        publish_exception(event: event, level: level)
       rescue StandardError => e
         if respond_to?(:log) && log.respond_to?(:warn)
           log.warn("Failed to publish structured exception event: #{e.class}: #{e.message}")
         else
           warn("Failed to publish structured exception event: #{e.class}: #{e.message}")
         end
+      end
+
+      def publish_exception(event:, level:)
+        lex_name = event[:lex] || 'core'
+        component = event[:component_type] || :unknown
+        options = {
+          routing_key: "legion.logging.exception.#{level}.#{lex_name}.#{component}",
+          headers:     build_exception_headers(event, component, level),
+          properties:  build_exception_properties(event, level)
+        }
+        callback = Legion::Logging.exception_writer
+        writer = @async_writer
+        return true if writer&.alive? && writer.push(AsyncWriter::EventEntry.new(callback: callback, event: event, options: options))
+
+        callback.call(event, **options)
       end
 
       def thread(kvl: false, **_opts)
@@ -348,15 +363,6 @@ module Legion
           priority:      HeaderBuilder::EXCEPTION_PRIORITY[level] || 0,
           delivery_mode: 2
         }
-      end
-
-      def publish_exception_event(event, level)
-        lex_name = event[:lex] || 'core'
-        comp     = event[:component_type] || :unknown
-        routing_key = "legion.logging.exception.#{level}.#{lex_name}.#{comp}"
-        headers     = build_exception_headers(event, comp, level)
-        properties  = build_exception_properties(event, level)
-        Legion::Logging.exception_writer.call(event, routing_key: routing_key, headers: headers, properties: properties)
       end
 
       def build_writer_context(level, message)
