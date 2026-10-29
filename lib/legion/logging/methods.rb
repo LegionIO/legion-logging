@@ -25,7 +25,7 @@ module Legion
         elsif log_caller
           message.concat Rainbow(caller_locations[0..size]).cyan.underline
         end
-        log.unknown(message)
+        unknown(message)
       end
 
       def debug(message = nil, task_id: nil, conv_id: nil, request_id: nil, exchange_id: nil, chain_id: nil, **_ctx)
@@ -113,17 +113,17 @@ module Legion
             ctx = %i[warn error fatal].include?(level) ? build_writer_context(level, raw) : nil
             writer = @async_writer
             caller_trace = capture_runner_trace_for_async
-            if writer&.alive?
-              writer.push(AsyncWriter::LogEntry.new(
-                            level: level, message: formatted, writer_context: ctx,
-                            segments: Thread.current[:legion_log_segments],
-                            method_ctx: Thread.current[:legion_log_method],
-                            caller_trace: caller_trace,
-                            conv_id: Thread.current[:legion_log_conv_id],
-                            request_id: Thread.current[:legion_log_request_id],
-                            exchange_id: Thread.current[:legion_log_exchange_id],
-                            chain_id: Thread.current[:legion_log_chain_id]
-                          ))
+            if @async || writer
+              push_async_entry(entry: AsyncWriter::LogEntry.new(
+                level: level, message: formatted, writer_context: ctx,
+                segments: Thread.current[:legion_log_segments],
+                method_ctx: Thread.current[:legion_log_method],
+                caller_trace: caller_trace,
+                conv_id: Thread.current[:legion_log_conv_id],
+                request_id: Thread.current[:legion_log_request_id],
+                exchange_id: Thread.current[:legion_log_exchange_id],
+                chain_id: Thread.current[:legion_log_chain_id]
+              ))
             else
               with_caller_trace(caller_trace) { write_forced(level, formatted) }
               fire_log_writer(level, raw) if ctx
@@ -189,7 +189,7 @@ module Legion
         }
         callback = Legion::Logging.exception_writer
         writer = @async_writer
-        return true if writer&.alive? && writer.push(AsyncWriter::EventEntry.new(callback: callback, event: event, options: options))
+        return push_async_entry(entry: AsyncWriter::EventEntry.new(callback: callback, event: event, options: options)) if @async || writer
 
         callback.call(event, **options)
       end
@@ -306,26 +306,32 @@ module Legion
       def write_async_or_sync(level, formatted_message, raw_message, writer_context: nil)
         writer = @async_writer
         caller_trace = capture_runner_trace_for_async
-        if writer&.alive?
-          queued = writer.push(AsyncWriter::LogEntry.new(
-                                 level:          level,
-                                 message:        formatted_message,
-                                 writer_context: writer_context,
-                                 segments:       Thread.current[:legion_log_segments],
-                                 method_ctx:     Thread.current[:legion_log_method],
-                                 caller_trace:   caller_trace,
-                                 conv_id:        Thread.current[:legion_log_conv_id],
-                                 request_id:     Thread.current[:legion_log_request_id],
-                                 exchange_id:    Thread.current[:legion_log_exchange_id],
-                                 chain_id:       Thread.current[:legion_log_chain_id]
-                               ))
-          return if queued
+        if @async || writer
+          return push_async_entry(entry: AsyncWriter::LogEntry.new(
+            level:          level,
+            message:        formatted_message,
+            writer_context: writer_context,
+            segments:       Thread.current[:legion_log_segments],
+            method_ctx:     Thread.current[:legion_log_method],
+            caller_trace:   caller_trace,
+            conv_id:        Thread.current[:legion_log_conv_id],
+            request_id:     Thread.current[:legion_log_request_id],
+            exchange_id:    Thread.current[:legion_log_exchange_id],
+            chain_id:       Thread.current[:legion_log_chain_id]
+          ))
         end
 
         with_caller_trace(caller_trace) do
           log.public_send(level, formatted_message)
           fire_log_writer(level, raw_message) if writer_context
         end
+      end
+
+      def push_async_entry(entry:) # rubocop:disable Naming/PredicateMethod
+        writer = @async_writer
+        raise ClosedQueueError, 'async logging writer is unavailable' unless writer&.alive? && writer.push(entry)
+
+        true
       end
 
       def capture_runner_trace_for_async

@@ -1,5 +1,11 @@
 # Legion::Logging Changelog
 
+## [1.5.9] - 2026-10-29
+
+### Fixed
+- Keep the standard Ruby Logger interface returned by `log`, including `add`, `log`, and raw append, on the configured async writer; preserve producer context for Sinatra/APM consumers (#22).
+- Route instance tracing through async logging and raise `ClosedQueueError` for rejected async writes instead of silently performing producer-thread IO.
+
 ## [1.5.8] - 2026-10-29
 
 ### Fixed

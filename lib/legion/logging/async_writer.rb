@@ -8,6 +8,8 @@ module Legion
       LogEntry = ::Data.define(:level, :message, :writer_context, :segments, :method_ctx, :caller_trace,
                                :conv_id, :request_id, :exchange_id, :chain_id)
       EventEntry = ::Data.define(:callback, :event, :options)
+      OutputEntry = ::Data.define(:severity, :message, :progname, :segments, :method_ctx, :caller_trace,
+                                  :conv_id, :request_id, :exchange_id, :chain_id)
       SHUTDOWN = :shutdown
       THREAD_KEYS = %i[
         legion_log_segments legion_log_method legion_log_caller
@@ -68,6 +70,10 @@ module Legion
         @thread&.alive? || false
       end
 
+      def current_thread?
+        Thread.current.equal?(@thread)
+      end
+
       private
 
       def consume
@@ -86,8 +92,12 @@ module Legion
         end
 
         with_entry_context(entry) do
-          @logger.send(entry.level, entry.message)
-          fire_writer(entry) if entry.writer_context
+          if entry.is_a?(OutputEntry)
+            entry.severity.nil? ? @logger << entry.message : @logger.add(entry.severity, entry.message, entry.progname)
+          else
+            @logger.send(entry.level, entry.message)
+            fire_writer(entry) if entry.writer_context
+          end
         end
       rescue StandardError => e
         warn("legion-log-writer error: #{e.message} (#{e.backtrace&.first})")

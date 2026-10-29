@@ -2,7 +2,7 @@
 
 Logging module for the [LegionIO](https://github.com/LegionIO/LegionIO) framework. Provides colorized console output via Rainbow, structured JSON logging, multi-output IO, and a consistent logging interface across all Legion gems and extensions.
 
-**Version**: 1.5.8
+**Version**: 1.5.9
 
 ## Installation
 
@@ -49,6 +49,8 @@ Legion::Logging.setup(level: 'info', async: false)
 Bounded backpressure is intentional: saturation blocks callers rather than dropping logs or allowing unbounded memory growth. A stalled destination can therefore stall producers once the queue fills. Buffer capacity limits queued entries, not their total byte size, and does not guarantee delivery across process termination.
 
 Use `Legion::Logging.stop_async_writer` during shutdown to flush and stop the writer thread; check its return value before assuming the flush completed.
+
+The standard Ruby Logger interface returned by `Legion::Logging.log` also queues output in async mode, including `add`, `log`, and `<<`. Instance tracing uses the same async path. If an async writer is unavailable or rejects an entry during shutdown, logging raises `ClosedQueueError` rather than falling back to synchronous IO. Explicit synchronous mode retains direct output.
 
 ### Structured JSON Output
 

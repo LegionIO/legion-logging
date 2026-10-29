@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'fileutils'
+require_relative 'output_logger'
 
 module Legion
   module Logging
@@ -125,13 +126,13 @@ module Legion
           file = File.new(path, 'a')
           file.sync = true
           io = MultiIO.new($stdout, file)
-          @log = ::Logger.new(io)
+          @log = Legion::Logging::OutputLogger.new(io)
         elsif logfile
           file = File.new(prepare_log_path(logfile), 'a')
           file.sync = true
-          @log = ::Logger.new(file)
+          @log = Legion::Logging::OutputLogger.new(file)
         else
-          @log = ::Logger.new($stdout)
+          @log = Legion::Logging::OutputLogger.new($stdout)
         end
 
         close_replaced_log(previous_log)
@@ -181,6 +182,7 @@ module Legion
         return false if @async_writer&.alive? && stop_async_writer == false
 
         @async_writer = AsyncWriter.new(log, buffer_size: buffer_size)
+        log.async_writer = @async_writer
         @async_writer.start
         @async = true
         true
@@ -190,6 +192,8 @@ module Legion
         writer = @async_writer
         stopped = writer&.stop
         return false if stopped == false
+
+        writer.logger.async_writer = nil if writer&.logger.respond_to?(:async_writer=)
 
         close_replaced_log(writer.logger) if writer.respond_to?(:logger)
         @async_writer = nil if @async_writer.equal?(writer)
