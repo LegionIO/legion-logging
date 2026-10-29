@@ -52,7 +52,7 @@ RSpec.describe 'logging from writer callbacks' do
     expect(writer_calls).to eq(1)
     expect(hook_calls).to eq(1)
   ensure
-    release << true
+    release&.<< true
   end
 
   it 'writes nested exception events locally instead of invoking the exception writer recursively' do

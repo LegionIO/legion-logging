@@ -94,7 +94,7 @@ RSpec.describe 'async output through the standard Logger interface' do
     expect(logger.stop_async_writer(timeout: 1)).to be(true)
     expect(sink.messages.join).to include('accepted by the sole writer')
   ensure
-    2.times { release << true }
+    2.times { release&.<< true }
     first&.join(3)
     second&.join(3)
     sink.release << true

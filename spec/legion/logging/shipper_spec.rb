@@ -90,7 +90,7 @@ RSpec.describe Legion::Logging::Shipper do
     expect(described_class.flush).to be(true)
     expect(shipped_events.first['message']).to eq('threshold')
   ensure
-    release << true
+    release&.<< true
     producer&.join(3)
   end
 
@@ -114,7 +114,7 @@ RSpec.describe Legion::Logging::Shipper do
     expect(described_class.flush).to be(true)
     expect(shipped_events.map { |event| event['message'] }).to eq(['in flight', 'backpressured'])
   ensure
-    2.times { release << true }
+    2.times { release&.<< true }
     producer&.join(3)
   end
 
@@ -163,7 +163,7 @@ RSpec.describe Legion::Logging::Shipper do
     expect(described_class.flush).to be(true)
     expect(shipped_events.first['message']).to eq('slow delivery')
   ensure
-    release << true
+    release&.<< true
     flusher&.join(3)
   end
 end

@@ -274,7 +274,7 @@ RSpec.describe 'asynchronous exception delivery' do
       release << true
       expect(delivered.pop(timeout: 3)).to include(exception_class: 'RuntimeError', task_id: 'task-22')
     ensure
-      release << true
+      release&.<< true
       producer&.join(3)
       Legion::Logging.stop_async_writer
     end

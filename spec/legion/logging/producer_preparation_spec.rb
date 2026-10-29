@@ -50,7 +50,7 @@ RSpec.describe 'asynchronous log preparation' do
     expect(output.string).to include('original payload', 'original-request')
     expect(output.string).not_to include('mutated')
   ensure
-    release << true
+    release&.<< true
     producer&.join(3)
   end
 
@@ -95,7 +95,7 @@ RSpec.describe 'asynchronous log preparation' do
       expect(output.string).to include('deferred exception', '/app/jobs/work.rb:42')
       expect(output.string).not_to include('/changed.rb')
     ensure
-      release << true
+      release&.<< true
       producer&.join(3)
     end
   end
@@ -177,6 +177,6 @@ RSpec.describe 'asynchronous log preparation' do
     expect(records.map { |record| record['thread'] }).to eq([Thread.current.object_id] * 3)
     expect(records.map { |record| record['timestamp'] }).to eq([enqueued_at.iso8601(3)] * 3)
   ensure
-    3.times { release << true }
+    3.times { release&.<< true }
   end
 end

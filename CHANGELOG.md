@@ -1,5 +1,10 @@
 # Legion::Logging Changelog
 
+## [1.5.17] - 2026-10-29
+
+### Fixed
+- Make async regression cleanup nil-safe so setup failures are not replaced by secondary errors while releasing worker gates (#22; PR #23 review feedback).
+
 ## [1.5.16] - 2026-10-29
 
 ### Fixed

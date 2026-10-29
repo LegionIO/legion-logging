@@ -70,7 +70,7 @@ RSpec.describe Legion::Logging::MethodTracer do
     expect(Legion::Logging.stop_async_writer).to be(true)
     expect(output.string).to include('greet', 'async trace')
   ensure
-    release << true
+    release&.<< true
     producer&.join(3)
   end
 end
