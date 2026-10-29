@@ -26,7 +26,7 @@ module Legion
             end
             true
           rescue StandardError => e
-            Legion::Logging.error("FileTransport ship failed: #{e.message}") if defined?(Legion::Logging)
+            Kernel.warn("FileTransport ship failed: #{e.message}")
             false
           end
 

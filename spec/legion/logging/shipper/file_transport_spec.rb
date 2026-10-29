@@ -60,7 +60,9 @@ RSpec.describe Legion::Logging::Shipper::FileTransport do
                                               .and_return('/nonexistent_root_dir/siem.log')
       allow(FileUtils).to receive(:mkdir_p).and_raise(Errno::EACCES, 'permission denied')
 
-      expect(described_class.ship({ level: 'error', message: 'test' })).to be(false)
+      expect do
+        expect(described_class.ship({ level: 'error', message: 'test' })).to be(false)
+      end.to output(/permission denied/i).to_stderr
     end
 
     it 'falls back to DEFAULT_PATH when Legion::Settings is not defined' do

@@ -2,7 +2,7 @@
 
 Logging module for the [LegionIO](https://github.com/LegionIO/LegionIO) framework. Provides colorized console output via Rainbow, structured JSON logging, multi-output IO, and a consistent logging interface across all Legion gems and extensions.
 
-**Version**: 1.5.11
+**Version**: 1.5.12
 
 ## Installation
 
@@ -66,7 +66,9 @@ This is useful for log aggregation pipelines (Elasticsearch, Splunk, etc.).
 
 ### Multi-Output IO
 
-`Legion::Logging::MultiIO` writes to multiple destinations simultaneously — for example, stdout and a file at the same time. Used internally by the Builder when `log_file` is set alongside console output.
+`Legion::Logging::MultiIO` writes to destinations sequentially—for example, stdout followed by a file. It is a synchronous IO primitive used by the async writer, not a parallel executor. A slow destination delays that worker and can eventually cause queue backpressure.
+
+Opt-in `MethodTracer` output uses the configured logging queue rather than writing directly to the traced application's stdout. Hook dispatch is synchronous on its invoking thread; normal async logging invokes hooks on the writer, not on producers.
 
 ### Buffered Shipping
 
@@ -76,9 +78,13 @@ Defaults: `batch_size: 100`, `flush_interval: 5` seconds, and `buffer_size: 10_0
 
 `Shipper.flush(timeout: 5)` requests worker delivery and waits up to the supplied deadline; it returns `false` on timeout or delivery failure. `Shipper.stop(timeout: 5)` wakes and joins the worker without moving delivery onto the caller. A timeout retains the worker and accepted events; check the return value before assuming delivery completed.
 
+`FileTransport.ship_batch` and `HttpTransport.ship_batch` are intentionally synchronous delivery primitives; use `Shipper.ship` for producer-side asynchronous shipping. Sink failures are reported locally to stderr instead of being forwarded back into the failing shipper.
+
 ### SIEM Export
 
 `Legion::Logging::SIEMExporter` provides PHI-redacting export helpers for security event pipelines:
+
+`export_to_splunk` is an explicitly synchronous request/response API. Use the HTTP Shipper for asynchronous delivery. Both HTTP implementations configure 5-second connection and 10-second read/write timeouts; these are phase timeouts, not a total request deadline.
 
 ```ruby
 # Redact PHI patterns (SSN, phone, MRN, DOB) from a string

@@ -29,7 +29,7 @@ module Legion
           req.body = ::JSON.dump({ event: redact_phi(event.to_s), time: Time.now.to_f })
 
           Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == 'https',
-                                                     open_timeout: 5, read_timeout: 10) do |http|
+                                                     open_timeout: 5, read_timeout: 10, write_timeout: 10) do |http|
             http.request(req)
           end
         rescue StandardError => e

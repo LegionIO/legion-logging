@@ -1,5 +1,12 @@
 # Legion::Logging Changelog
 
+## [1.5.12] - 2026-10-29
+
+### Fixed
+- Route opt-in MethodTracer output through configured async logging instead of direct producer-thread stdout writes (#22).
+- Keep failed shipping diagnostics out of the forwarding pipeline to avoid logging-to-shipper feedback loops, and add explicit HTTP write timeouts.
+- Clarify that direct transport/export APIs, MultiIO, and hook dispatch are synchronous primitives; their async callers own scheduling.
+
 ## [1.5.11] - 2026-10-29
 
 ### Fixed
