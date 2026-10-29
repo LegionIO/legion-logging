@@ -1,11 +1,15 @@
 # frozen_string_literal: true
 
 require 'fileutils'
+require 'monitor'
 require_relative 'output_logger'
 
 module Legion
   module Logging
     module Builder
+      LIFECYCLE_MUTEX = Mutex.new
+      private_constant :LIFECYCLE_MUTEX
+
       def log_format(format: :text, include_pid: false, **)
         @format = format.to_sym
         if @format == :json
@@ -118,29 +122,31 @@ module Legion
       end
 
       def set_log(logfile: nil, log_stdout: nil, **)
-        return false if @async_writer && stop_async_writer == false
+        with_lifecycle_lock do
+          return false if @async_writer && stop_async_writer == false
 
-        previous_log = @log
+          previous_log = @log
 
-        if logfile && log_stdout != false
-          path = prepare_log_path(logfile)
-          require_relative 'multi_io'
-          file = File.new(path, 'a')
-          file.sync = true
-          io = MultiIO.new($stdout, file)
-          @log = Legion::Logging::OutputLogger.new(io)
-        elsif logfile
-          file = File.new(prepare_log_path(logfile), 'a')
-          file.sync = true
-          @log = Legion::Logging::OutputLogger.new(file)
-        else
-          @log = Legion::Logging::OutputLogger.new($stdout)
+          if logfile && log_stdout != false
+            path = prepare_log_path(logfile)
+            require_relative 'multi_io'
+            file = File.new(path, 'a')
+            file.sync = true
+            io = MultiIO.new($stdout, file)
+            @log = Legion::Logging::OutputLogger.new(io)
+          elsif logfile
+            file = File.new(prepare_log_path(logfile), 'a')
+            file.sync = true
+            @log = Legion::Logging::OutputLogger.new(file)
+          else
+            @log = Legion::Logging::OutputLogger.new($stdout)
+          end
+
+          @log.async_writer = @async_writer
+
+          close_replaced_log(previous_log)
+          @log
         end
-
-        @log.async_writer = @async_writer
-
-        close_replaced_log(previous_log)
-        @log
       end
 
       def prepare_log_path(path)
@@ -180,26 +186,38 @@ module Legion
         (@async == true && @async_writer&.alive?) || false
       end
 
-      # rubocop:disable Naming/PredicateMethod
       def start_async_writer(buffer_size: 10_000, timeout: 2)
-        require_relative 'async_writer'
-        return false if @async_writer && stop_async_writer(timeout: timeout) == false
+        with_lifecycle_lock do
+          require_relative 'async_writer'
+          return false if @async_writer && stop_async_writer(timeout: timeout) == false
 
-        @async_writer = AsyncWriter.new(log, buffer_size: buffer_size)
-        log.async_writer = @async_writer
-        @async_writer.start
-        @async = true
-        true
+          @async_writer = AsyncWriter.new(log, buffer_size: buffer_size)
+          log.async_writer = @async_writer
+          @async_writer.start
+          @async = true
+          true
+        end
       end
 
       def stop_async_writer(timeout: 2)
-        return true unless @async_writer
+        with_lifecycle_lock do
+          return true unless @async_writer
 
-        @async_writer.stop(timeout: timeout)
+          @async_writer.stop(timeout: timeout)
+        end
       end
-      # rubocop:enable Naming/PredicateMethod
 
       private
+
+      def with_lifecycle_lock
+        lock = LIFECYCLE_MUTEX.synchronize { @lifecycle_lock ||= Monitor.new }
+        entered = lock.try_enter
+        return false unless entered
+
+        yield
+      ensure
+        lock.exit if entered
+      end
 
       def close_replaced_log(logger)
         return unless logger

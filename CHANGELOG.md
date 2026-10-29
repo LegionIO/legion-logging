@@ -1,5 +1,12 @@
 # Legion::Logging Changelog
 
+## [1.5.14] - 2026-10-29
+
+### Fixed
+- Serialize logger-owned lifecycle transitions so concurrent startup cannot orphan a writer and discard its accepted backlog (#22).
+- Reject contending lifecycle calls without blocking callbacks behind their own shutdown join.
+- Retry retained shipping batches on a subsequent shutdown call after a previous delivery failure.
+
 ## [1.5.13] - 2026-10-29
 
 ### Fixed

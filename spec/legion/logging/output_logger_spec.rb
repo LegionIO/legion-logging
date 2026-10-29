@@ -69,6 +69,38 @@ RSpec.describe 'async output through the standard Logger interface' do
     expect(sink.messages).to be_empty
   end
 
+  it 'rejects a competing startup instead of rebinding an output to two workers' do
+    entered = Queue.new
+    release = Queue.new
+    writers = []
+    allow(Legion::Logging::AsyncWriter).to receive(:new).and_wrap_original do |original, *args, **kwargs|
+      writer = original.call(*args, **kwargs)
+      writers << writer
+      entered << true
+      release.pop
+      writer
+    end
+    first = Thread.new { logger.start_async_writer }
+    expect(entered.pop(timeout: 3)).to be(true)
+    second = Thread.new { logger.start_async_writer }
+
+    expect(second.join(1)).to equal(second)
+    expect(second.value).to be(false)
+    release << true
+    expect(first.join(3)).to equal(first)
+    logger.info('accepted by the sole writer')
+    expect(sink.entered.pop(timeout: 3)).to be(true)
+    sink.release << true
+    expect(logger.stop_async_writer(timeout: 1)).to be(true)
+    expect(sink.messages.join).to include('accepted by the sole writer')
+  ensure
+    2.times { release << true }
+    first&.join(3)
+    second&.join(3)
+    sink.release << true
+    writers&.each { |writer| writer.stop(timeout: 1) }
+  end
+
   it 'does not switch to synchronous IO when reconfiguration times out' do
     Legion::Logging.setup(level: 'debug', log_file: File::NULL, log_stdout: false)
     Legion::Logging.log.reopen(sink)

@@ -96,16 +96,23 @@ module Legion
         end
 
         def stop(timeout: 5)
+          deadline = ::Process.clock_gettime(::Process::CLOCK_MONOTONIC) + timeout if timeout
           thread = MUTEX.synchronize do
             @stopping = true
             WAKE.broadcast
             CHANGED.broadcast
+            if !@flush_thread&.alive? && @accepted > @delivered
+              @flush_thread = Thread.new { consume }
+              @flush_thread.name = 'legion-log-shipper'
+              @flush_thread.abort_on_exception = false
+            end
             @flush_thread
           end
           return MUTEX.synchronize { @accepted == @delivered } unless thread
           return false if Thread.current.equal?(thread)
 
-          thread.join(timeout)
+          remaining = [deadline - ::Process.clock_gettime(::Process::CLOCK_MONOTONIC), 0].max if deadline
+          thread.join(remaining)
           MUTEX.synchronize { !thread.alive? && @accepted == @delivered }
         end
 

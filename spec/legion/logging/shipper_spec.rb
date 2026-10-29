@@ -116,6 +116,20 @@ RSpec.describe Legion::Logging::Shipper do
     expect(shipped_events.map { |event| event['message'] }).to eq(['retry me', 'newer'])
   end
 
+  it 'retries retained events when shutdown is called again after delivery fails' do
+    attempts = 0
+    allow(transport).to receive(:ship_batch).and_wrap_original do |original, batch|
+      attempts += 1
+      attempts == 1 ? false : original.call(batch)
+    end
+    described_class.ship({ level: 'error', message: 'recover during shutdown' })
+
+    expect(described_class.stop(timeout: 1)).to be(false)
+    expect(shipped_events).to be_empty
+    expect(described_class.stop(timeout: 1)).to be(true)
+    expect(shipped_events.map { |event| event['message'] }).to eq(['recover during shutdown'])
+  end
+
   it 'times out a flush without moving blocked delivery onto the caller' do
     config[:logging][:shipper][:batch_size] = 1
     entered = Queue.new

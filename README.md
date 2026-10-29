@@ -2,7 +2,7 @@
 
 Logging module for the [LegionIO](https://github.com/LegionIO/LegionIO) framework. Provides colorized console output via Rainbow, structured JSON logging, multi-output IO, and a consistent logging interface across all Legion gems and extensions.
 
-**Version**: 1.5.13
+**Version**: 1.5.14
 
 ## Installation
 
@@ -51,6 +51,8 @@ Bounded backpressure is intentional: saturation blocks callers rather than dropp
 Use `Legion::Logging.stop_async_writer(timeout: 2)` during shutdown. It closes admission and asks the worker to drain accepted entries, returning `true` only after that worker exits. A deadline expiry returns `false` without killing the worker or draining on the caller; release the blocked destination and retry shutdown. Calling shutdown from a writer callback requests closure but returns `false` rather than joining itself.
 
 Stopped async loggers reject new writes until explicitly restarted or configured with `setup(async: false)`. Reconfiguration stops the previous worker before replacing its output. `setup(shutdown_timeout: 2, ...)` returns `false` if that drain times out and does not change the existing output; it does not silently enter synchronous mode.
+
+Lifecycle transitions are serialized per logger. A competing setup/start/stop returns `false` instead of creating overlapping workers or blocking a callback behind its own shutdown. Retry the control operation after the active transition completes.
 
 The standard Ruby Logger interface returned by `Legion::Logging.log` also queues output in async mode, including `add`, `log`, and `<<`. Instance tracing uses the same async path. If an async writer is unavailable or rejects an entry during shutdown, logging raises `ClosedQueueError` rather than falling back to synchronous IO. Explicit synchronous mode retains direct output.
 
