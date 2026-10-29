@@ -74,6 +74,9 @@ module Legion
         end
 
         def all_patterns
+          return PATTERNS unless defined?(Legion::Settings)
+          return PATTERNS unless Legion::Settings.respond_to?(:loaded?) ? Legion::Settings.loaded? : true
+
           @all_patterns ||= build_patterns
         end
 
@@ -85,8 +88,6 @@ module Legion
         end
 
         def custom_patterns
-          return {} unless defined?(Legion::Settings)
-
           raw = Legion::Settings.dig(:logging, :redactor, :custom_patterns)
           return {} unless raw.is_a?(Hash)
 

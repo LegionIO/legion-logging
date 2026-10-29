@@ -117,7 +117,10 @@ module Legion
         end
 
         def enabled?
-          (defined?(Legion::Settings) && Legion::Settings.dig(:logging, :shipper, :enabled) == true) || false
+          return false unless defined?(Legion::Settings)
+          return false unless Legion::Settings.respond_to?(:loaded?) ? Legion::Settings.loaded? : true
+
+          Legion::Settings.dig(:logging, :shipper, :enabled) == true
         end
 
         private

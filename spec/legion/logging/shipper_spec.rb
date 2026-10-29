@@ -38,6 +38,21 @@ RSpec.describe Legion::Logging::Shipper do
     expect(shipped_events).to be_empty
   end
 
+  it 'does not initialize settings or deliver events before settings are loaded' do
+    initialized = false
+    allow(Legion::Settings).to receive(:loaded?).and_return(false)
+    allow(Legion::Settings).to receive(:dig) do |*keys|
+      initialized = true
+      config.dig(*keys)
+    end
+
+    expect(described_class.start).to be(false)
+    described_class.ship({ level: 'error', message: 'before settings load' })
+    expect(described_class.flush).to be(true)
+    expect(shipped_events).to be_empty
+    expect(initialized).to be(false)
+  end
+
   it 'filters below the minimum and preserves higher severity events' do
     config[:logging][:shipper][:levels] = ['error']
     described_class.ship({ level: 'warn', message: 'below minimum' })

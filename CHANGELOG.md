@@ -1,5 +1,15 @@
 # Legion::Logging Changelog
 
+## [1.5.15] - 2026-10-29
+
+### Changed
+- Move normal log and both exception APIs' formatting, redaction, event enrichment, fingerprinting, and envelope preparation onto the async worker (#22).
+- Capture producer call sites, timestamps, thread/session context, and shallow input snapshots before enqueueing; preserve component-level overrides during worker output.
+- Honor configurable forwarding levels at `logging.transport.log_levels`, retaining warn/error/fatal by default and avoiding duplicate synchronous event construction.
+
+### Fixed
+- Avoid implicitly loading Settings from logging and shipping; early redaction defaults no longer hide custom patterns loaded later.
+
 ## [1.5.14] - 2026-10-29
 
 ### Fixed

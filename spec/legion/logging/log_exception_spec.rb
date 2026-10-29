@@ -222,6 +222,7 @@ RSpec.describe 'Legion::Logging.log_exception' do
       end
     end
     stub_const('Legion::Settings', settings_mod)
+    allow(Legion::Settings).to receive(:dig).and_return(nil)
     allow(Legion::Settings).to receive(:dig).with(:logging, :redactor, :custom_patterns).and_return({})
     Legion::Settings.instance_variable_set(:@loader, fake_loader)
     allow(fake_loader).to receive(:dig).and_return(nil)

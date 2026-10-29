@@ -100,13 +100,7 @@ module Legion
           @configuration_generation = configuration_generation + 1
           Legion::Logging::Redactor.refresh_patterns! if defined?(Legion::Logging::Redactor)
           if async
-            buffer = if defined?(Legion::Settings) && Legion::Settings.respond_to?(:[])
-                       logging_settings = Legion::Settings[:logging]
-                       async_settings = logging_settings[:async] if logging_settings.is_a?(Hash)
-                       async_settings[:buffer_size] if async_settings.is_a?(Hash)
-                     end
-            buffer ||= 10_000
-            start_async_writer(buffer_size: buffer)
+            start_async_writer(buffer_size: Legion::Logging::Settings.async_buffer_size)
           else
             @async_writer = nil
             @async = false

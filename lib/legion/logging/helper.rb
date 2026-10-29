@@ -80,6 +80,13 @@ module Legion
       end
 
       def handle_exception(exception, task_id: nil, level: :error, handled: true, **opts)
+        if Legion::Logging.async_producer?
+          return Legion::Logging.defer_log_call(
+            receiver: self, method_name: :handle_exception, arguments: [exception],
+            keywords: { task_id: task_id, level: level, handled: handled, **opts }
+          )
+        end
+
         segments = derive_log_segments
         spec = gem_spec
         ctx = Thread.current[:legion_context] || {}
@@ -519,7 +526,9 @@ module Legion
         lines << "  #{context_line}" unless context_line.empty?
 
         max_frames = if event[:backtrace_limit].nil?
-                       defined?(Legion::Settings) ? Legion::Settings[:logging][:backtrace_limit] : nil
+                       if defined?(Legion::Settings) && (!Legion::Settings.respond_to?(:loaded?) || Legion::Settings.loaded?)
+                         Legion::Settings.dig(:logging, :backtrace_limit)
+                       end
                      else
                        event[:backtrace_limit]
                      end

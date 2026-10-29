@@ -69,9 +69,10 @@ module Legion
           bt = Array(exception.backtrace)
           cf_file, cf_line, cf_func = parse_backtrace_location(bt.first) ||
                                       caller_location(caller_offset)
+          origin = Thread.current[:legion_log_origin]
 
           event = {
-            timestamp:       Time.now.utc.iso8601(3),
+            timestamp:       (origin&.[](:timestamp) || Time.now.utc).iso8601(3),
             level:           level,
             exception_class: exception.class.name,
             message:         truncate_bytes(exception.message.to_s, MAX_MESSAGE_BYTES),
@@ -89,7 +90,7 @@ module Legion
             ruby_version:    "#{RUBY_VERSION} #{RUBY_PLATFORM}",
             handled:         handled,
             pid:             ::Process.pid,
-            thread:          Thread.current.object_id
+            thread:          origin&.[](:thread) || Thread.current.object_id
           }
 
           event[:task_id] = task_id if task_id
@@ -147,12 +148,13 @@ module Legion
         private
 
         def base_fields(level, message)
+          origin = Thread.current[:legion_log_origin]
           {
-            timestamp: Time.now.utc.iso8601(3),
+            timestamp: (origin&.[](:timestamp) || Time.now.utc).iso8601(3),
             level:     level,
             message:   message.is_a?(Exception) ? message.message : strip_ansi(message.to_s),
             pid:       ::Process.pid,
-            thread:    Thread.current.object_id
+            thread:    origin&.[](:thread) || Thread.current.object_id
           }
         end
 
@@ -166,6 +168,7 @@ module Legion
 
         def add_node(event)
           return unless defined?(Legion::Settings)
+          return unless Legion::Settings.respond_to?(:loaded?) ? Legion::Settings.loaded? : true
 
           name = begin
             Legion::Settings[:client][:name]
@@ -177,7 +180,7 @@ module Legion
         end
 
         def add_caller_info(event, offset)
-          loc = caller_locations(offset + 1, 1)&.first
+          loc = Thread.current[:legion_log_origin]&.[](:location) || caller_locations(offset + 1, 1)&.first
           return unless loc
 
           event[:caller] = {
@@ -268,7 +271,7 @@ module Legion
         end
 
         def caller_location(offset)
-          loc = caller_locations(offset + 2, 1)&.first
+          loc = Thread.current[:legion_log_origin]&.[](:location) || caller_locations(offset + 2, 1)&.first
           return [nil, nil, nil] unless loc
 
           [loc.absolute_path || loc.path, loc.lineno, loc.base_label]

@@ -26,6 +26,18 @@ RSpec.describe Legion::Logging::Shipper::HttpTransport do
       expect(described_class.ship(events)).to be(false)
     end
 
+    it 'does not initialize unloaded settings to discover an endpoint' do
+      initialized = false
+      allow(Legion::Settings).to receive(:loaded?).and_return(false)
+      allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :endpoint) do
+        initialized = true
+        nil
+      end
+
+      expect(described_class.ship(events)).to be(false)
+      expect(initialized).to be(false)
+    end
+
     it 'POSTs a JSON body to the endpoint' do
       response = instance_double(Net::HTTPSuccess, is_a?: true)
       allow(response).to receive(:is_a?).with(Net::HTTPSuccess).and_return(true)

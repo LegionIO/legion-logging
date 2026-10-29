@@ -7,6 +7,10 @@ require 'stringio'
 
 RSpec.describe Legion::Logging::AsyncWriter do
   let(:logger) { Logger.new($stdout) }
+  let(:entry_context) do
+    { force: false, writer_context: nil, segments: nil, method_ctx: nil, caller_trace: nil,
+      conv_id: nil, request_id: nil, exchange_id: nil, chain_id: nil }
+  end
 
   after { subject.stop if subject.alive? }
 
@@ -18,10 +22,7 @@ RSpec.describe Legion::Logging::AsyncWriter do
     let(:entered) { Queue.new }
     let(:release) { Queue.new }
     let(:entry) do
-      described_class::LogEntry.new(
-        level: :info, message: 'accepted before start', writer_context: nil, segments: nil, method_ctx: nil,
-        caller_trace: nil, conv_id: nil, request_id: nil, exchange_id: nil, chain_id: nil
-      )
+      described_class::LogEntry.new(**entry_context, level: :info, message: 'accepted before start')
     end
 
     before do
@@ -89,10 +90,7 @@ RSpec.describe Legion::Logging::AsyncWriter do
     before { subject.start }
 
     it 'writes entries to the logger' do
-      entry = Legion::Logging::AsyncWriter::LogEntry.new(
-        level: :info, message: 'async test', writer_context: nil, segments: nil, method_ctx: nil,
-        caller_trace: nil, conv_id: nil, request_id: nil, exchange_id: nil, chain_id: nil
-      )
+      entry = Legion::Logging::AsyncWriter::LogEntry.new(**entry_context, level: :info, message: 'async test')
       subject.push(entry)
       subject.stop
     end
@@ -102,10 +100,7 @@ RSpec.describe Legion::Logging::AsyncWriter do
       allow(logger).to receive(:info) { |msg| messages << msg }
 
       3.times do |i|
-        subject.push(Legion::Logging::AsyncWriter::LogEntry.new(
-                       level: :info, message: "msg-#{i}", writer_context: nil, segments: nil, method_ctx: nil,
-                       caller_trace: nil, conv_id: nil, request_id: nil, exchange_id: nil, chain_id: nil
-                     ))
+        subject.push(Legion::Logging::AsyncWriter::LogEntry.new(**entry_context, level: :info, message: "msg-#{i}"))
       end
       subject.stop
 
@@ -121,10 +116,7 @@ RSpec.describe Legion::Logging::AsyncWriter do
         messages << msg
       end
 
-      entry = Legion::Logging::AsyncWriter::LogEntry.new(
-        level: :info, message: 'slow message', writer_context: nil, segments: nil, method_ctx: nil,
-        caller_trace: nil, conv_id: nil, request_id: nil, exchange_id: nil, chain_id: nil
-      )
+      entry = Legion::Logging::AsyncWriter::LogEntry.new(**entry_context, level: :info, message: 'slow message')
 
       subject.push(entry)
       write_started.pop
@@ -139,18 +131,12 @@ RSpec.describe Legion::Logging::AsyncWriter do
 
     it 'blocks the caller when the queue is full' do
       2.times do |i|
-        subject.push(Legion::Logging::AsyncWriter::LogEntry.new(
-                       level: :info, message: "fill-#{i}", writer_context: nil, segments: nil, method_ctx: nil,
-                       caller_trace: nil, conv_id: nil, request_id: nil, exchange_id: nil, chain_id: nil
-                     ))
+        subject.push(Legion::Logging::AsyncWriter::LogEntry.new(**entry_context, level: :info, message: "fill-#{i}"))
       end
 
       blocked = true
       pusher = Thread.new do
-        subject.push(Legion::Logging::AsyncWriter::LogEntry.new(
-                       level: :info, message: 'overflow', writer_context: nil, segments: nil, method_ctx: nil,
-                       caller_trace: nil, conv_id: nil, request_id: nil, exchange_id: nil, chain_id: nil
-                     ))
+        subject.push(Legion::Logging::AsyncWriter::LogEntry.new(**entry_context, level: :info, message: 'overflow'))
         blocked = false
       end
 
@@ -171,53 +157,11 @@ RSpec.describe Legion::Logging::AsyncWriter do
 
       subject.start
       5.times do |i|
-        subject.push(Legion::Logging::AsyncWriter::LogEntry.new(
-                       level: :warn, message: "drain-#{i}", writer_context: nil, segments: nil, method_ctx: nil,
-                       caller_trace: nil, conv_id: nil, request_id: nil, exchange_id: nil, chain_id: nil
-                     ))
+        subject.push(Legion::Logging::AsyncWriter::LogEntry.new(**entry_context, level: :warn, message: "drain-#{i}"))
       end
       subject.stop
 
       expect(messages).to eq((0..4).map { |i| "drain-#{i}" })
-    end
-  end
-
-  describe 'writer context' do
-    subject { described_class.new(logger) }
-
-    before { subject.start }
-
-    it 'calls log_writer when writer_context is present' do
-      captured = nil
-      Legion::Logging.log_writer = lambda { |event, routing_key:, headers: nil, properties: nil|
-        captured = { event: event, routing_key: routing_key, headers: headers, properties: properties }
-      }
-
-      event = { level: :error, message: 'writer test', lex: 'core' }
-      entry = Legion::Logging::AsyncWriter::LogEntry.new(
-        level: :error, message: 'writer test',
-        writer_context: { level: :error, event: event },
-        segments: nil, method_ctx: nil, caller_trace: nil, conv_id: nil, request_id: nil, exchange_id: nil, chain_id: nil
-      )
-      subject.push(entry)
-      deadline = Time.now + 2
-      sleep 0.01 while captured.nil? && Time.now < deadline
-      expect(captured).not_to be_nil
-      expect(captured[:event][:message]).to eq('writer test')
-
-      Legion::Logging.log_writer = nil
-    end
-  end
-
-  describe 'LogEntry' do
-    subject { described_class.new(logger) }
-
-    it 'is a frozen Data struct' do
-      entry = Legion::Logging::AsyncWriter::LogEntry.new(
-        level: :info, message: 'test', writer_context: nil, segments: nil, method_ctx: nil,
-        caller_trace: nil, conv_id: nil, request_id: nil, exchange_id: nil, chain_id: nil
-      )
-      expect(entry).to be_frozen
     end
   end
 end

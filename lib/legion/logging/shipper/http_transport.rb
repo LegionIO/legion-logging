@@ -67,12 +67,14 @@ module Legion
 
           def auth_token
             return nil unless defined?(Legion::Settings)
+            return nil unless Legion::Settings.respond_to?(:loaded?) ? Legion::Settings.loaded? : true
 
             Legion::Settings.dig(:logging, :shipper, :auth_token)
           end
 
           def resolve_endpoint
             return nil unless defined?(Legion::Settings)
+            return nil unless Legion::Settings.respond_to?(:loaded?) ? Legion::Settings.loaded? : true
 
             Legion::Settings.dig(:logging, :shipper, :endpoint)
           end

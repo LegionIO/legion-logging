@@ -2,7 +2,7 @@
 
 Logging module for the [LegionIO](https://github.com/LegionIO/LegionIO) framework. Provides colorized console output via Rainbow, structured JSON logging, multi-output IO, and a consistent logging interface across all Legion gems and extensions.
 
-**Version**: 1.5.14
+**Version**: 1.5.15
 
 ## Installation
 
@@ -53,6 +53,10 @@ Use `Legion::Logging.stop_async_writer(timeout: 2)` during shutdown. It closes a
 Stopped async loggers reject new writes until explicitly restarted or configured with `setup(async: false)`. Reconfiguration stops the previous worker before replacing its output. `setup(shutdown_timeout: 2, ...)` returns `false` if that drain times out and does not change the existing output; it does not silently enter synchronous mode.
 
 Lifecycle transitions are serialized per logger. A competing setup/start/stop returns `false` instead of creating overlapping workers or blocking a callback behind its own shutdown. Retry the control operation after the active transition completes.
+
+Producers evaluate message blocks and capture caller/context plus shallow snapshots of strings, arrays, hashes, and exceptions. The worker performs formatting, redaction, structured-event enrichment, fingerprinting, and envelope construction. Nested payload objects are not deep-copied. Explicit caller tracing and application-provided message/settings methods can still perform producer-side work.
+
+Forwarding defaults to warn/error/fatal. Set `logging.transport.log_levels` to an array of strings or symbols to change which locally emitted levels reach `log_writer` and Hooks; absent or empty lists retain the defaults. Library-owned Settings lookups use defaults while Settings is unloaded rather than triggering initialization.
 
 The standard Ruby Logger interface returned by `Legion::Logging.log` also queues output in async mode, including `add`, `log`, and `<<`. Instance tracing uses the same async path. If an async writer is unavailable or rejects an entry during shutdown, logging raises `ClosedQueueError` rather than falling back to synchronous IO. Explicit synchronous mode retains direct output.
 
