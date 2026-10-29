@@ -1,5 +1,11 @@
 # Legion::Logging Changelog
 
+## [1.5.11] - 2026-10-29
+
+### Fixed
+- Move threshold-triggered and explicit Shipper delivery onto one background worker; `flush(timeout:)` waits for delivery without performing sink IO on its caller (#22).
+- Bound accepted and in-flight shipping events with `logging.shipper.buffer_size` (default 10,000), preserve failed batches for retry, and wake the worker for flush/shutdown instead of sleeping through requests.
+
 ## [1.5.10] - 2026-10-29
 
 ### Fixed

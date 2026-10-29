@@ -2,7 +2,7 @@
 
 Logging module for the [LegionIO](https://github.com/LegionIO/LegionIO) framework. Provides colorized console output via Rainbow, structured JSON logging, multi-output IO, and a consistent logging interface across all Legion gems and extensions.
 
-**Version**: 1.5.10
+**Version**: 1.5.11
 
 ## Installation
 
@@ -67,6 +67,14 @@ This is useful for log aggregation pipelines (Elasticsearch, Splunk, etc.).
 ### Multi-Output IO
 
 `Legion::Logging::MultiIO` writes to multiple destinations simultaneously — for example, stdout and a file at the same time. Used internally by the Builder when `log_file` is set alongside console output.
+
+### Buffered Shipping
+
+Explicitly require `legion/logging/shipper` and enable `logging.shipper.enabled` to use the file or HTTP batch shipper. `Shipper.ship(event)` starts its worker automatically and never performs threshold-triggered delivery on the producer. Set `logging.shipper.transport` to `file` or `http`.
+
+Defaults: `batch_size: 100`, `flush_interval: 5` seconds, and `buffer_size: 10_000`. The capacity includes in-flight events; producers wait when it is full. Failed batches remain queued in order for retry.
+
+`Shipper.flush(timeout: 5)` requests worker delivery and waits up to the supplied deadline; it returns `false` on timeout or delivery failure. `Shipper.stop(timeout: 5)` wakes and joins the worker without moving delivery onto the caller. A timeout retains the worker and accepted events; check the return value before assuming delivery completed.
 
 ### SIEM Export
 
