@@ -2,7 +2,7 @@
 
 Logging module for the [LegionIO](https://github.com/LegionIO/LegionIO) framework. Provides colorized console output via Rainbow, structured JSON logging, multi-output IO, and a consistent logging interface across all Legion gems and extensions.
 
-**Version**: 1.5.18
+**Version**: 1.5.19
 
 ## Installation
 
@@ -50,13 +50,17 @@ Bounded backpressure is intentional: saturation blocks callers rather than dropp
 
 Use `Legion::Logging.stop_async_writer(timeout: 2)` during shutdown. It closes admission and asks the worker to drain accepted entries, returning `true` only after that worker exits. A deadline expiry returns `false` without killing the worker or draining on the caller; release the blocked destination and retry shutdown. Calling shutdown from a writer callback requests closure but returns `false` rather than joining itself.
 
+A successful stop means queued entries have been processed, not that a sink durably stored them or an external service acknowledged them. AsyncWriter reports sink/callback failures locally and does not automatically retry them. The Shipper's retained-batch retry behavior is separate.
+
 Stopped async loggers reject new writes until explicitly restarted or configured with `setup(async: false)`. Reconfiguration stops the previous worker before replacing its output. `setup(shutdown_timeout: 2, ...)` returns `false` if that drain times out and does not change the existing output; it does not silently enter synchronous mode.
 
 Lifecycle transitions are serialized per logger. A competing setup/start/stop returns `false` instead of creating overlapping workers or blocking a callback behind its own shutdown. Retry the control operation after the active transition completes.
 
+Configuration is a synchronous control path: opening or closing owned log files can still block in `setup`. Shutdown deadlines bound worker drain/join, not every filesystem operation.
+
 Producers evaluate message blocks and capture caller/context plus shallow snapshots of strings, arrays, hashes, and exceptions. The worker performs formatting, redaction, structured-event enrichment, fingerprinting, and envelope construction. Nested payload objects are not deep-copied. Explicit caller tracing and application-provided message/settings methods can still perform producer-side work.
 
-Text and JSON timestamps represent enqueue time, not time spent waiting for a destination. JSON thread IDs identify the producer. Standard Logger calls use the same shallow snapshot policy for messages and context.
+Text and JSON timestamps represent enqueue time, not time spent waiting for a destination. JSON thread IDs identify the producer. Standard Logger calls use the same shallow snapshot policy for messages and context; custom raw Logger formatters receive the producer timestamp. The worker preserves producer-side `with_level` admission and already-resolved message/progname values, including a block's nil result.
 
 Forwarding defaults to warn/error/fatal. Set `logging.transport.log_levels` to an array of strings or symbols to change which locally emitted levels reach `log_writer` and Hooks; absent or empty lists retain the defaults. Library-owned Settings lookups use defaults while Settings is unloaded rather than triggering initialization.
 
@@ -82,11 +86,11 @@ Opt-in `MethodTracer` output uses the configured logging queue rather than writi
 
 ### Buffered Shipping
 
-Explicitly require `legion/logging/shipper` and enable `logging.shipper.enabled` to use the file or HTTP batch shipper. `Shipper.ship(event)` starts its worker automatically and never performs threshold-triggered delivery on the producer. Set `logging.shipper.transport` to `file` or `http`.
+Explicitly require `legion/logging/shipper` and enable `logging.shipper.enabled` to use the file or HTTP batch shipper. `Shipper.ship(event)` starts its worker automatically and never performs threshold-triggered delivery on the producer. Filtering and redaction still run on the calling thread; batch delivery runs on the worker. Set `logging.shipper.transport` to `file` or `http`.
 
 Defaults: `batch_size: 100`, `flush_interval: 5` seconds, and `buffer_size: 10_000`. The capacity includes in-flight events; producers wait when it is full. Failed batches remain queued in order for retry.
 
-`Shipper.flush(timeout: 5)` requests worker delivery and waits up to the supplied deadline; it returns `false` on timeout or delivery failure. `Shipper.stop(timeout: 5)` wakes and joins the worker without moving delivery onto the caller. A timeout retains the worker and accepted events; check the return value before assuming delivery completed.
+`Shipper.flush(timeout: 5)` requests worker delivery and waits up to the supplied deadline; it returns `false` on timeout or delivery failure. `Shipper.stop(timeout: 5)` wakes and joins the worker without moving delivery onto the caller. A timeout retains the worker and accepted events; check the return value before assuming delivery completed. If shutdown exits after a delivery failure, retrying `stop` starts a drainer for the retained batch.
 
 `FileTransport.ship_batch` and `HttpTransport.ship_batch` are intentionally synchronous delivery primitives; use `Shipper.ship` for producer-side asynchronous shipping. Sink failures are reported locally to stderr instead of being forwarded back into the failing shipper.
 
@@ -156,15 +160,15 @@ Structured exception events include:
 
 ### Writer Lambdas
 
-`log_writer` and `exception_writer` are pluggable lambda slots that replace the old Hooks system. Assign them to forward events to external systems:
+`log_writer` and `exception_writer` are pluggable lambda slots for forwarding events to external systems. They coexist with Hooks; normal async logging invokes both on the writer thread:
 
 ```ruby
 Legion::Logging.exception_writer = lambda do |payload, routing_key:, headers:, properties:|
   publish_to_amqp(payload, routing_key:, headers:, properties:)
 end
 
-Legion::Logging.log_writer = lambda do |context, routing_key:|
-  publish_log(context, routing_key:)
+Legion::Logging.log_writer = lambda do |context, routing_key:, headers:, properties:|
+  publish_log(context, routing_key:, headers:, properties:)
 end
 ```
 

@@ -1,5 +1,11 @@
 # Legion::Logging Changelog
 
+## [1.5.19] - 2026-10-29
+
+### Changed
+- Document the complete async contract: bounded backpressure, producer snapshots, worker-side preparation, lifecycle deadlines, reentrant logging, and explicit synchronous boundaries (#22).
+- Correct writer callback signatures and describe delivery acknowledgement limits, retained Shipper retries, and raw Logger compatibility (#22).
+
 ## [1.5.18] - 2026-10-29
 
 ### Fixed
