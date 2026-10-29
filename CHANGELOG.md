@@ -1,5 +1,11 @@
 # Legion::Logging Changelog
 
+## [1.5.18] - 2026-10-29
+
+### Fixed
+- Preserve producer-side raw Logger admission and message/progname normalization: accepted `with_level` records are not filtered again, and a block's nil result reaches the formatter unchanged (#22).
+- Pass captured producer time to raw Logger formatters instead of the later worker dispatch time (#22).
+
 ## [1.5.17] - 2026-10-29
 
 ### Fixed

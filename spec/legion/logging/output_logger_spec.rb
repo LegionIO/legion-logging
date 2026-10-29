@@ -61,6 +61,30 @@ RSpec.describe 'async output through the standard Logger interface' do
     producer&.join(3)
   end
 
+  it 'preserves raw records admitted by a producer-local severity override' do
+    output = StringIO.new
+    logger.log.reopen(output)
+    logger.log.level = Logger::ERROR
+
+    logger.log.with_level(Logger::DEBUG) { logger.log.debug('accepted debug') }
+
+    expect(logger.stop_async_writer).to be(true)
+    expect(output.string).to include('accepted debug')
+  end
+
+  it 'preserves a nil block result and explicit progname for custom formatters' do
+    output = StringIO.new
+    logger.log.reopen(output)
+    logger.log.formatter = lambda do |severity, _datetime, progname, message|
+      "#{JSON.generate({ severity: severity, progname: progname, message: message })}\n"
+    end
+
+    logger.log.info('component') { nil }
+
+    expect(logger.stop_async_writer).to be(true)
+    expect(JSON.parse(output.string)).to eq('severity' => 'INFO', 'progname' => 'component', 'message' => nil)
+  end
+
   it 'reports rejected async writes instead of falling back to producer IO' do
     logger.stop_async_writer
 

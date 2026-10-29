@@ -130,7 +130,7 @@ module Legion
 
         with_entry_context(entry) do
           if entry.is_a?(OutputEntry)
-            entry.severity.nil? ? @logger << entry.message : @logger.add(entry.severity, entry.message, entry.progname)
+            write_output_entry(entry)
           else
             if entry.force
               formatter = @logger.formatter || ::Logger::Formatter.new
@@ -147,6 +147,13 @@ module Legion
       ensure
         @preparing = previous_preparing
         Thread.current[:legion_log_origin] = callback_origin if entry.is_a?(EventEntry)
+      end
+
+      def write_output_entry(entry)
+        return @logger << entry.message if entry.severity.nil?
+
+        severity = @logger.send(:format_severity, entry.severity)
+        @logger << @logger.send(:format_message, severity, entry.origin[:timestamp].getlocal, entry.progname, entry.message)
       end
 
       def write_reentrant_entry(entry)
