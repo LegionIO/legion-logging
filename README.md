@@ -2,7 +2,7 @@
 
 Logging module for the [LegionIO](https://github.com/LegionIO/LegionIO) framework. Provides colorized console output via Rainbow, structured JSON logging, multi-output IO, and a consistent logging interface across all Legion gems and extensions.
 
-**Version**: 1.5.2
+**Version**: 1.5.7
 
 ## Installation
 
@@ -33,7 +33,7 @@ Legion::Logging.fatal('critical failure')
 
 ### Async Logging
 
-By default, `setup` enables async logging — log calls push to a background writer thread and return immediately. Fatal calls always bypass the queue and write synchronously.
+By default, `setup` enables async logging: log calls enqueue output for a background writer, including fatal messages. Async does not mean wait-free. The queue holds at most 10,000 entries by default, and producers wait for capacity when it fills.
 
 ```ruby
 # Async is on by default
@@ -43,10 +43,12 @@ Legion::Logging.setup(level: 'info')
 Legion::Logging.setup(level: 'info', async: false)
 
 # Configure buffer size via Legion::Settings
-# Legion::Settings[:logging, :async, :buffer_size] = 20_000
+# Legion::Settings[:logging][:async] = { buffer_size: 20_000 }
 ```
 
-When the buffer is full, callers block until the writer drains — this preserves log completeness. Use `Legion::Logging.stop_async_writer` during shutdown to flush and stop the writer thread.
+Bounded backpressure is intentional: saturation blocks callers rather than dropping logs or allowing unbounded memory growth. A stalled destination can therefore stall producers once the queue fills. Buffer capacity limits queued entries, not their total byte size, and does not guarantee delivery across process termination.
+
+Use `Legion::Logging.stop_async_writer` during shutdown to flush and stop the writer thread; check its return value before assuming the flush completed.
 
 ### Structured JSON Output
 

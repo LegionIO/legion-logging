@@ -1,5 +1,11 @@
 # Legion::Logging Changelog
 
+## [1.5.7] - 2026-10-29
+
+### Changed
+- Document bounded, lossless-in-process queue backpressure as the intentional async saturation policy: producers wait rather than silently dropping logs or growing the queue without a bound (#22).
+- Correct async fatal routing and the buffer-size configuration example.
+
 ## [1.5.6] - 2026-06-01
 
 ### Added
