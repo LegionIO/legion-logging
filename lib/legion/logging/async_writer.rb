@@ -11,7 +11,6 @@ module Legion
       EventEntry = ::Data.define(:callback, :event, :options)
       OutputEntry = ::Data.define(:severity, :message, :progname, :segments, :method_ctx, :caller_trace,
                                   :conv_id, :request_id, :exchange_id, :chain_id)
-      SHUTDOWN = :shutdown
       THREAD_KEYS = %i[
         legion_log_segments legion_log_method legion_log_caller
         legion_log_conv_id legion_log_request_id legion_log_exchange_id legion_log_chain_id
@@ -28,32 +27,44 @@ module Legion
         @accepting = true
       end
 
+      # rubocop:disable Naming/PredicateMethod
       def start
-        return if @thread&.alive?
+        @state_mutex.synchronize do
+          return @accepting if @thread&.alive?
 
-        @state_mutex.synchronize { @accepting = true }
-        drain
-        @queue = SizedQueue.new(@buffer_size)
-        @thread = Thread.new { consume }
-        @thread.name = 'legion-log-writer'
-        @thread.abort_on_exception = false
+          if @queue.closed?
+            queue = SizedQueue.new(@buffer_size)
+            queue << @queue.pop(true) until @queue.empty?
+            @queue = queue
+          end
+          @accepting = true
+          @thread = Thread.new { consume(queue: @state_mutex.synchronize { @queue }) }
+          @thread.name = 'legion-log-writer'
+          @thread.abort_on_exception = false
+        end
+        true
       end
 
-      # rubocop:disable Naming/PredicateMethod
       def stop(timeout: 2)
-        @state_mutex.synchronize { @accepting = false }
-
-        unless @thread&.alive?
-          drain
-          @thread = nil
-          return true
+        deadline = ::Process.clock_gettime(::Process::CLOCK_MONOTONIC) + timeout if timeout
+        thread = @state_mutex.synchronize do
+          @accepting = false
+          @queue.close
+          if !@thread&.alive? && !@queue.empty?
+            @thread = Thread.new { consume(queue: @state_mutex.synchronize { @queue }) }
+            @thread.name = 'legion-log-writer'
+            @thread.abort_on_exception = false
+          end
+          @thread
         end
+        return true unless thread
+        return false if Thread.current.equal?(thread)
 
-        @queue.close
-        timeout ? @thread.join(timeout) : @thread.join
-        return false if @thread&.alive?
+        remaining = [deadline - ::Process.clock_gettime(::Process::CLOCK_MONOTONIC), 0].max if deadline
+        thread.join(remaining)
+        return false if thread.alive?
 
-        @thread = nil
+        @state_mutex.synchronize { @thread = nil if @thread.equal?(thread) }
         true
       end
 
@@ -79,10 +90,10 @@ module Legion
 
       private
 
-      def consume
+      def consume(queue:)
         loop do
-          entry = @queue.pop
-          break if entry.nil? || entry == SHUTDOWN
+          entry = queue.pop
+          break if entry.nil?
 
           write_entry(entry)
         end
@@ -132,15 +143,6 @@ module Legion
         yield
       ensure
         prev&.each { |k, v| Thread.current[k] = v }
-      end
-
-      def drain
-        until @queue.empty?
-          entry = @queue.pop(true)
-          write_entry(entry) unless entry == SHUTDOWN
-        end
-      rescue ThreadError
-        nil
       end
 
       def accepting?

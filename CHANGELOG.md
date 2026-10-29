@@ -1,5 +1,12 @@
 # Legion::Logging Changelog
 
+## [1.5.13] - 2026-10-29
+
+### Fixed
+- Keep startup and shutdown draining on the writer, including accepted work without a running consumer; apply shutdown deadlines without synchronous fallback (#22).
+- Retain timed-out workers and queues, reject writes after shutdown, and avoid joining the writer from its own callback.
+- Stop the existing writer before reconfiguring outputs; a failed shutdown leaves the configuration intact instead of opening a synchronous bypass.
+
 ## [1.5.12] - 2026-10-29
 
 ### Fixed

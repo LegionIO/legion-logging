@@ -62,10 +62,30 @@ RSpec.describe 'async output through the standard Logger interface' do
   end
 
   it 'reports rejected async writes instead of falling back to producer IO' do
-    logger.instance_variable_get(:@async_writer).stop
+    logger.stop_async_writer
 
     expect { logger.info('rejected message') }.to raise_error(ClosedQueueError)
     expect { logger.log.info('rejected raw message') }.to raise_error(ClosedQueueError)
     expect(sink.messages).to be_empty
+  end
+
+  it 'does not switch to synchronous IO when reconfiguration times out' do
+    Legion::Logging.setup(level: 'debug', log_file: File::NULL, log_stdout: false)
+    Legion::Logging.log.reopen(sink)
+    Legion::Logging.info('accepted before reconfiguration')
+    expect(sink.entered.pop(timeout: 3)).to be(true)
+
+    expect(Legion::Logging.setup(async: false, shutdown_timeout: 0.01)).to be(false)
+    expect { Legion::Logging.info('rejected during shutdown') }.to raise_error(ClosedQueueError)
+    expect { Legion::Logging.log.info('rejected raw output') }.to raise_error(ClosedQueueError)
+    expect(sink.messages).to be_empty
+    sink.release << true
+    expect(Legion::Logging.stop_async_writer(timeout: 1)).to be(true)
+    expect(sink.messages.join).to include('accepted before reconfiguration')
+    expect(sink.messages.join).not_to include('rejected')
+    expect(Legion::Logging.setup(async: false)).to be(true)
+  ensure
+    sink.release << true
+    Legion::Logging.stop_async_writer(timeout: 1)
   end
 end

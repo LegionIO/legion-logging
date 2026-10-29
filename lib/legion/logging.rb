@@ -76,8 +76,10 @@ module Legion
         Hooks.clear_hooks!
       end
 
-      def setup(level: 'debug', format: :text, async: true, **options)
-        output(**options)
+      def setup(level: 'debug', format: :text, async: true, shutdown_timeout: 2, **options)
+        return false if @async_writer && stop_async_writer(timeout: shutdown_timeout) == false
+        return false if output(**options) == false
+
         log_level(level)
         log_format(format: format, **options)
         @color = options[:color]
@@ -105,7 +107,10 @@ module Legion
           buffer ||= 10_000
           start_async_writer(buffer_size: buffer)
         else
-          stop_async_writer
+          @async_writer = nil
+          @async = false
+          log.async_writer = nil
+          true
         end
       end
     end

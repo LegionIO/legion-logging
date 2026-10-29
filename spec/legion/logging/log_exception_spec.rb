@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
+require 'stringio'
 
 RSpec.describe 'Legion::Logging.log_exception' do
   let(:error) do
@@ -221,6 +222,7 @@ RSpec.describe 'Legion::Logging.log_exception' do
       end
     end
     stub_const('Legion::Settings', settings_mod)
+    allow(Legion::Settings).to receive(:dig).with(:logging, :redactor, :custom_patterns).and_return({})
     Legion::Settings.instance_variable_set(:@loader, fake_loader)
     allow(fake_loader).to receive(:dig).and_return(nil)
     allow(fake_loader).to receive(:dig).with(:logging, :redaction, :enabled).and_return(true)
@@ -231,9 +233,12 @@ RSpec.describe 'Legion::Logging.log_exception' do
     redacted_error = RuntimeError.new('SSN 123-45-6789')
     redacted_error.set_backtrace(error.backtrace)
 
-    expect(Legion::Logging.log).to receive(:error).with(include('[REDACTED]')).and_call_original
+    output = StringIO.new
+    Legion::Logging.log.reopen(output)
     Legion::Logging.log_exception(redacted_error)
 
+    expect(output.string).to include('[REDACTED]')
+    expect(output.string).not_to include('123-45-6789')
     expect(captured[:message]).to include('[REDACTED]')
     expect(captured[:message]).not_to include('123-45-6789')
   end

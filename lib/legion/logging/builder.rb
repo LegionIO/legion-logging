@@ -118,6 +118,8 @@ module Legion
       end
 
       def set_log(logfile: nil, log_stdout: nil, **)
+        return false if @async_writer && stop_async_writer == false
+
         previous_log = @log
 
         if logfile && log_stdout != false
@@ -134,6 +136,8 @@ module Legion
         else
           @log = Legion::Logging::OutputLogger.new($stdout)
         end
+
+        @log.async_writer = @async_writer
 
         close_replaced_log(previous_log)
         @log
@@ -177,9 +181,9 @@ module Legion
       end
 
       # rubocop:disable Naming/PredicateMethod
-      def start_async_writer(buffer_size: 10_000)
+      def start_async_writer(buffer_size: 10_000, timeout: 2)
         require_relative 'async_writer'
-        return false if @async_writer&.alive? && stop_async_writer == false
+        return false if @async_writer && stop_async_writer(timeout: timeout) == false
 
         @async_writer = AsyncWriter.new(log, buffer_size: buffer_size)
         log.async_writer = @async_writer
@@ -188,17 +192,10 @@ module Legion
         true
       end
 
-      def stop_async_writer
-        writer = @async_writer
-        stopped = writer&.stop
-        return false if stopped == false
+      def stop_async_writer(timeout: 2)
+        return true unless @async_writer
 
-        writer.logger.async_writer = nil if writer&.logger.respond_to?(:async_writer=)
-
-        close_replaced_log(writer.logger) if writer.respond_to?(:logger)
-        @async_writer = nil if @async_writer.equal?(writer)
-        @async = false
-        true
+        @async_writer.stop(timeout: timeout)
       end
       # rubocop:enable Naming/PredicateMethod
 

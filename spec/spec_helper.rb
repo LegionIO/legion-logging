@@ -25,7 +25,11 @@ RSpec.configure do |config|
     c.syntax = :expect
   end
 
+  config.before(:each) do
+    Legion::Logging.setup(level: 'debug', async: false)
+  end
+
   config.after(:each) do
-    Legion::Logging.stop_async_writer if Legion::Logging.respond_to?(:async?) && Legion::Logging.async?
+    Legion::Logging.stop_async_writer
   end
 end

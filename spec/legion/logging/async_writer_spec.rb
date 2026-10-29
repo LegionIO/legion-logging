@@ -3,6 +3,7 @@
 require 'spec_helper'
 require 'legion/logging/async_writer'
 require 'tmpdir'
+require 'stringio'
 
 RSpec.describe Legion::Logging::AsyncWriter do
   let(:logger) { Logger.new($stdout) }
@@ -12,58 +13,73 @@ RSpec.describe Legion::Logging::AsyncWriter do
   describe '#start / #stop lifecycle' do
     subject { described_class.new(logger) }
 
-    it 'starts a writer thread' do
-      subject.start
-      expect(subject.alive?).to be true
+    let(:output) { StringIO.new }
+    let(:logger) { Logger.new(output) }
+    let(:entered) { Queue.new }
+    let(:release) { Queue.new }
+    let(:entry) do
+      described_class::LogEntry.new(
+        level: :info, message: 'accepted before start', writer_context: nil, segments: nil, method_ctx: nil,
+        caller_trace: nil, conv_id: nil, request_id: nil, exchange_id: nil, chain_id: nil
+      )
     end
 
-    it 'stops the writer thread cleanly' do
-      subject.start
-      subject.stop
-      expect(subject.alive?).to be false
-    end
-
-    it 'is safe to stop when not started' do
-      expect { subject.stop }.not_to raise_error
-    end
-
-    it 'is safe to start twice' do
-      subject.start
-      thread = subject.instance_variable_get(:@thread)
-      subject.start
-      expect(subject.instance_variable_get(:@thread)).to equal(thread)
-    end
-
-    it 'times out instead of deadlocking when shutdown cannot finish promptly' do
-      gate = Queue.new
-      slow_writer_class = Class.new(described_class) do
-        def initialize(logger, gate:, **)
-          @gate = gate
-          super(logger, **)
-        end
-
-        private
-
-        def consume
-          @gate.pop
-          super
-        end
+    before do
+      logger.formatter = lambda do |_severity, _time, _progname, message|
+        entered << Thread.current
+        release.pop
+        "#{message}\n"
       end
+    end
 
-      writer = slow_writer_class.new(logger, gate: gate, buffer_size: 1)
-      writer.start
-      writer.push(Legion::Logging::AsyncWriter::LogEntry.new(
-                    level: :info, message: 'blocked', writer_context: nil, segments: nil, method_ctx: nil,
-                    caller_trace: nil, conv_id: nil, request_id: nil, exchange_id: nil, chain_id: nil
-                  ))
+    after do
+      release << true
+      subject.stop(timeout: 1)
+    end
 
-      start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-      expect(writer.stop(timeout: 0.01)).to be(false)
-      elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time
-      expect(elapsed).to be < 0.2
+    it 'starts queued work without doing output on the startup caller' do
+      subject.push(entry)
+      starter = Thread.new { subject.start }
+      expect(starter.join(1)).to equal(starter)
+      output_thread = entered.pop(timeout: 3)
+      expect(output_thread).not_to be_nil
+      expect(output_thread).not_to equal(starter)
+      release << true
+      expect(subject.stop(timeout: 1)).to be(true)
+      expect(output.string.lines).to eq(["accepted before start\n"])
+    ensure
+      release << true
+      starter&.join(3)
+    end
 
-      gate << true
-      expect(writer.stop(timeout: 1)).to be(true)
+    it 'bounds shutdown even when accepted work has no running worker' do
+      subject.push(entry)
+      stopper = Thread.new { subject.stop(timeout: 0.01) }
+      output_thread = entered.pop(timeout: 3)
+      expect(output_thread).not_to be_nil
+      expect(stopper.join(0.5)).to equal(stopper)
+      expect(stopper.value).to be(false)
+      expect(output_thread).not_to equal(stopper)
+      expect(subject.start).to be(false)
+      release << true
+      expect(subject.stop(timeout: 1)).to be(true)
+      expect(output.string.lines).to eq(["accepted before start\n"])
+    ensure
+      release << true
+      stopper&.join(3)
+    end
+
+    it 'requests shutdown from its own callback without joining itself' do
+      stopped = Queue.new
+      subject.start
+      subject.push(described_class::EventEntry.new(
+                     callback: ->(_event, **) { stopped << subject.stop(timeout: 1) },
+                     event: {}, options: {}
+                   ))
+
+      expect(stopped.pop(timeout: 3)).to be(false)
+      expect(subject.stop(timeout: 1)).to be(true)
+      expect(subject.push(entry)).to be(false)
     end
   end
 
