@@ -147,4 +147,36 @@ RSpec.describe 'asynchronous log preparation' do
     expect(output.string).to include('DEBUG', 'visible component debug')
     expect(output.string).not_to include('filtered global debug')
   end
+
+  it 'keeps JSON output origin and raw Logger messages stable while they wait in the queue' do
+    Legion::Logging.setup(level: 'debug', format: :json, color: false, log_file: File::NULL, log_stdout: false)
+    output = StringIO.new
+    Legion::Logging.log.reopen(output)
+    entered = Queue.new
+    release = Queue.new
+    formatter = Legion::Logging.log.formatter
+    Legion::Logging.log.formatter = lambda do |*args|
+      entered << true
+      release.pop
+      formatter.call(*args)
+    end
+    enqueued_at = Time.utc(2026, 1, 2, 3, 4, 5)
+    allow(Time).to receive(:now).and_return(enqueued_at)
+    Legion::Logging.info('hold formatter')
+    expect(entered.pop(timeout: 3)).to be(true)
+    Legion::Logging.info('module output')
+    raw_message = +'raw output'
+    Legion::Logging.log.info(raw_message)
+    raw_message.replace('mutated raw output')
+    allow(Time).to receive(:now).and_return(enqueued_at + 10)
+    3.times { release << true }
+    expect(Legion::Logging.stop_async_writer).to be(true)
+
+    records = output.string.lines.map { |line| JSON.parse(line) }
+    expect(records.map { |record| record['message'] }).to eq(['hold formatter', 'module output', 'raw output'])
+    expect(records.map { |record| record['thread'] }).to eq([Thread.current.object_id] * 3)
+    expect(records.map { |record| record['timestamp'] }).to eq([enqueued_at.iso8601(3)] * 3)
+  ensure
+    3.times { release << true }
+  end
 end

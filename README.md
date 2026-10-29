@@ -2,7 +2,7 @@
 
 Logging module for the [LegionIO](https://github.com/LegionIO/LegionIO) framework. Provides colorized console output via Rainbow, structured JSON logging, multi-output IO, and a consistent logging interface across all Legion gems and extensions.
 
-**Version**: 1.5.15
+**Version**: 1.5.16
 
 ## Installation
 
@@ -55,6 +55,8 @@ Stopped async loggers reject new writes until explicitly restarted or configured
 Lifecycle transitions are serialized per logger. A competing setup/start/stop returns `false` instead of creating overlapping workers or blocking a callback behind its own shutdown. Retry the control operation after the active transition completes.
 
 Producers evaluate message blocks and capture caller/context plus shallow snapshots of strings, arrays, hashes, and exceptions. The worker performs formatting, redaction, structured-event enrichment, fingerprinting, and envelope construction. Nested payload objects are not deep-copied. Explicit caller tracing and application-provided message/settings methods can still perform producer-side work.
+
+Text and JSON timestamps represent enqueue time, not time spent waiting for a destination. JSON thread IDs identify the producer. Standard Logger calls use the same shallow snapshot policy for messages and context.
 
 Forwarding defaults to warn/error/fatal. Set `logging.transport.log_levels` to an array of strings or symbols to change which locally emitted levels reach `log_writer` and Hooks; absent or empty lists retain the defaults. Library-owned Settings lookups use defaults while Settings is unloaded rather than triggering initialization.
 

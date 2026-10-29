@@ -25,11 +25,19 @@ module Legion
 
       def json_format(include_pid: false)
         log.formatter = proc do |severity, datetime, _progname, msg|
+          origin = Thread.current[:legion_log_origin]
+          if origin
+            timestamp = origin[:timestamp]
+            thread_id = origin[:thread]
+          else
+            timestamp = datetime.utc
+            thread_id = Thread.current.object_id
+          end
           entry = {
-            timestamp: datetime.utc.iso8601(3),
+            timestamp: timestamp.iso8601(3),
             level:     severity.downcase,
             message:   msg.is_a?(String) ? msg.gsub(/\e\[[0-9;]*m/, '') : msg.to_s,
-            thread:    Thread.current.object_id
+            thread:    thread_id
           }
           entry[:pid] = ::Process.pid if include_pid
           segments = Thread.current[:legion_log_segments]
@@ -53,6 +61,7 @@ module Legion
 
       def text_format(include_pid: false, **options)
         log.formatter = proc do |severity, datetime, _progname, msg|
+          datetime = Thread.current[:legion_log_origin]&.[](:timestamp)&.getlocal || datetime
           lex_name = resolve_lex_tag(options)
           runner_trace = Thread.current[:legion_log_caller] || build_runner_trace if lex_name
 

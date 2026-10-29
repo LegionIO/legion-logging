@@ -11,7 +11,7 @@ module Legion
       EventEntry = ::Data.define(:callback, :event, :options)
       CallEntry = ::Data.define(:receiver, :method_name, :arguments, :keywords, :context)
       OutputEntry = ::Data.define(:severity, :message, :progname, :segments, :method_ctx, :caller_trace,
-                                  :conv_id, :request_id, :exchange_id, :chain_id)
+                                  :conv_id, :request_id, :exchange_id, :chain_id, :origin)
       THREAD_KEYS = %i[
         legion_log_segments legion_log_method legion_log_caller
         legion_log_conv_id legion_log_request_id legion_log_exchange_id legion_log_chain_id
@@ -19,6 +19,13 @@ module Legion
       CALL_THREAD_KEYS = (THREAD_KEYS + %i[legion_context legion_session_context legion_log_origin]).freeze
 
       attr_reader :logger
+
+      def self.snapshot_value(value:)
+        return value if value.nil? || value.frozen?
+        return value unless value.is_a?(String) || value.is_a?(Array) || value.is_a?(Hash) || value.is_a?(Exception)
+
+        value.dup.freeze
+      end
 
       def initialize(logger, buffer_size: 10_000)
         @logger = logger
@@ -166,6 +173,8 @@ module Legion
 
       def with_entry_context(entry)
         prev = THREAD_KEYS.map { |k| [k, Thread.current[k]] }
+        previous_origin = Thread.current[:legion_log_origin]
+        Thread.current[:legion_log_origin] = entry.origin if entry.is_a?(OutputEntry)
         Thread.current[:legion_log_segments]    = entry.segments
         Thread.current[:legion_log_method]      = entry.method_ctx
         Thread.current[:legion_log_caller]      = entry.caller_trace
@@ -176,6 +185,7 @@ module Legion
         yield
       ensure
         prev&.each { |k, v| Thread.current[k] = v }
+        Thread.current[:legion_log_origin] = previous_origin
       end
 
       def accepting?

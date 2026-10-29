@@ -251,7 +251,7 @@ module Legion
         raise ClosedQueueError, 'async logging writer is unavailable' unless @async_writer&.alive?
 
         context = Legion::Logging::AsyncWriter::CALL_THREAD_KEYS.to_h do |key|
-          [key, snapshot_log_value(Thread.current[key])]
+          [key, Legion::Logging::AsyncWriter.snapshot_value(value: Thread.current[key])]
         end
         location = caller_locations(1, 16).find do |frame|
           path = frame.absolute_path || frame.path
@@ -260,8 +260,8 @@ module Legion
         context[:legion_log_origin] = { location: location, timestamp: Time.now.utc, thread: Thread.current.object_id }
         push_async_entry(entry: Legion::Logging::AsyncWriter::CallEntry.new(
           receiver: receiver, method_name: method_name,
-          arguments: arguments.map { |value| snapshot_log_value(value) },
-          keywords: keywords.transform_values { |value| snapshot_log_value(value) },
+          arguments: arguments.map { |value| Legion::Logging::AsyncWriter.snapshot_value(value: value) },
+          keywords: keywords.transform_values { |value| Legion::Logging::AsyncWriter.snapshot_value(value: value) },
           context: context
         ))
       end
@@ -275,12 +275,6 @@ module Legion
       end
 
       private
-
-      def snapshot_log_value(value)
-        return value unless value.is_a?(String) || value.is_a?(Array) || value.is_a?(Hash) || value.is_a?(Exception)
-
-        value.frozen? ? value : value.dup.freeze
-      end
 
       def resolve_backtrace_limit(explicit_limit)
         return explicit_limit unless explicit_limit.nil?

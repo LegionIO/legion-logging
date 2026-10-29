@@ -1,5 +1,11 @@
 # Legion::Logging Changelog
 
+## [1.5.16] - 2026-10-29
+
+### Fixed
+- Preserve producer timestamps in text/JSON output and producer thread IDs in JSON, including queued standard Logger calls (#22).
+- Snapshot mutable raw Logger messages and context before enqueueing so later caller mutation cannot change accepted output.
+
 ## [1.5.15] - 2026-10-29
 
 ### Changed

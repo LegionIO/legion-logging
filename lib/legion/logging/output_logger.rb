@@ -39,14 +39,17 @@ module Legion
 
       def enqueue_output(severity:, message:, progname:) # rubocop:disable Naming/PredicateMethod
         entry = Legion::Logging::AsyncWriter::OutputEntry.new(
-          severity: severity, message: message, progname: progname,
-          segments: Thread.current[:legion_log_segments],
-          method_ctx: Thread.current[:legion_log_method],
-          caller_trace: Thread.current[:legion_log_caller],
-          conv_id: Thread.current[:legion_log_conv_id],
-          request_id: Thread.current[:legion_log_request_id],
-          exchange_id: Thread.current[:legion_log_exchange_id],
-          chain_id: Thread.current[:legion_log_chain_id]
+          severity:     severity,
+          message:      Legion::Logging::AsyncWriter.snapshot_value(value: message),
+          progname:     Legion::Logging::AsyncWriter.snapshot_value(value: progname),
+          segments:     Legion::Logging::AsyncWriter.snapshot_value(value: Thread.current[:legion_log_segments]),
+          method_ctx:   Legion::Logging::AsyncWriter.snapshot_value(value: Thread.current[:legion_log_method]),
+          caller_trace: Legion::Logging::AsyncWriter.snapshot_value(value: Thread.current[:legion_log_caller]),
+          conv_id:      Legion::Logging::AsyncWriter.snapshot_value(value: Thread.current[:legion_log_conv_id]),
+          request_id:   Legion::Logging::AsyncWriter.snapshot_value(value: Thread.current[:legion_log_request_id]),
+          exchange_id:  Legion::Logging::AsyncWriter.snapshot_value(value: Thread.current[:legion_log_exchange_id]),
+          chain_id:     Legion::Logging::AsyncWriter.snapshot_value(value: Thread.current[:legion_log_chain_id]),
+          origin:       { timestamp: Time.now.utc, thread: Thread.current.object_id }
         )
         raise ClosedQueueError, 'async logging writer is unavailable' unless @async_writer.alive? && @async_writer.push(entry)
 
