@@ -26,6 +26,18 @@ RSpec.describe Legion::Logging::Shipper::HttpTransport do
       expect(described_class.ship(events)).to be(false)
     end
 
+    it 'does not initialize unloaded settings to discover an endpoint' do
+      initialized = false
+      allow(Legion::Settings).to receive(:loaded?).and_return(false)
+      allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :endpoint) do
+        initialized = true
+        nil
+      end
+
+      expect(described_class.ship(events)).to be(false)
+      expect(initialized).to be(false)
+    end
+
     it 'POSTs a JSON body to the endpoint' do
       response = instance_double(Net::HTTPSuccess, is_a?: true)
       allow(response).to receive(:is_a?).with(Net::HTTPSuccess).and_return(true)
@@ -38,9 +50,18 @@ RSpec.describe Legion::Logging::Shipper::HttpTransport do
       expect(result).to be(true)
     end
 
-    it 'returns false on network error' do
+    it 'reports a network failure locally without feeding it back into log forwarding' do
+      forwarded = []
+      Legion::Logging.setup(level: 'debug', log_file: File::NULL, log_stdout: false, async: false)
+      Legion::Logging.log_writer = ->(event, **) { forwarded << event }
       allow(Net::HTTP).to receive(:start).and_raise(Errno::ECONNREFUSED)
-      expect(described_class.ship(events)).to be(false)
+
+      result = nil
+      expect { result = described_class.ship(events) }.to output(/Connection refused/i).to_stderr
+      expect(result).to be(false)
+      expect(forwarded).to be_empty
+    ensure
+      Legion::Logging.log_writer = nil
     end
 
     it 'sets Content-Type to application/json' do

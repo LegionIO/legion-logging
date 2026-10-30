@@ -2,212 +2,168 @@
 
 require 'spec_helper'
 require 'legion/logging/shipper'
+require 'tmpdir'
 
 RSpec.describe Legion::Logging::Shipper do
+  let(:transport) { Legion::Logging::Shipper::FileTransport }
+  let(:directory) { Dir.mktmpdir('legion-shipper') }
+  let(:path) { File.join(directory, 'events.jsonl') }
+  let(:config) do
+    { logging: { shipper: { enabled: true, transport: 'file', levels: ['warn'], batch_size: 2,
+                           buffer_size: 4, flush_interval: 60, file: { path: path } } } }
+  end
+
   before do
-    described_class.instance_variable_set(:@buffer, nil)
-    described_class.instance_variable_set(:@mutex, nil)
-    described_class.instance_variable_set(:@flush_thread, nil)
+    stub_const('Legion::Settings', Module.new)
+    allow(Legion::Settings).to receive(:dig) { |*keys| config.dig(*keys) }
+    allow(Legion::Settings).to receive(:[]) { |key| config[key] || {} }
+    Legion::Logging::Redactor.refresh_patterns!
   end
 
-  describe '.enabled?' do
-    it 'returns false when Legion::Settings is not defined' do
-      hide_const('Legion::Settings') if defined?(Legion::Settings)
-      expect(described_class.enabled?).to be(false)
-    end
-
-    it 'returns false when settings say disabled' do
-      stub_const('Legion::Settings', Module.new)
-      allow(Legion::Settings).to receive(:[]).and_return(nil)
-      allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :enabled).and_return(false)
-      expect(described_class.enabled?).to be(false)
-    end
-
-    it 'returns true when settings say enabled' do
-      stub_const('Legion::Settings', Module.new)
-      allow(Legion::Settings).to receive(:[]).and_return(nil)
-      allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :enabled).and_return(true)
-      expect(described_class.enabled?).to be(true)
-    end
+  after do
+    allow(transport).to receive(:ship_batch).and_call_original
+    described_class.flush(timeout: 3)
+    described_class.stop(timeout: 3)
+    FileUtils.remove_entry(directory)
   end
 
-  describe '.ship' do
-    before do
-      stub_const('Legion::Settings', Module.new)
-      allow(Legion::Settings).to receive(:[]).and_return(nil)
-      allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :enabled).and_return(true)
-      allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :transport).and_return('file')
-      allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :levels).and_return(%w[warn error fatal])
-      allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :batch_size).and_return(100)
-      allow(Legion::Settings).to receive(:dig).with(:logging, :redactor, :custom_patterns).and_return(nil)
-    end
-
-    it 'does nothing when disabled' do
-      allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :enabled).and_return(false)
-      expect(described_class).not_to receive(:buffer_event)
-      described_class.ship({ level: 'error', message: 'test' })
-    end
-
-    it 'does nothing when event level is below minimum' do
-      file_transport = Legion::Logging::Shipper::FileTransport
-      expect(file_transport).not_to receive(:ship)
-      described_class.ship({ level: 'debug', message: 'test' })
-    end
-
-    it 'buffers events at or above minimum level' do
-      described_class.ship({ level: 'warn', message: 'test' })
-      expect(described_class.instance_variable_get(:@buffer)).not_to be_empty
-    end
-
-    it 'redacts PII before buffering' do
-      described_class.ship({ level: 'error', message: 'SSN 123-45-6789' })
-      buffer = described_class.instance_variable_get(:@buffer)
-      expect(buffer.first[:message]).to include('[REDACTED]')
-    end
+  def shipped_events
+    File.exist?(path) ? File.readlines(path).map { |line| JSON.parse(line) } : []
   end
 
-  describe '.flush' do
-    before do
-      stub_const('Legion::Settings', Module.new)
-      allow(Legion::Settings).to receive(:[]).and_return(nil)
-      allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :transport).and_return('file')
-      allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :batch_size).and_return(100)
-    end
-
-    it 'does nothing when buffer is nil' do
-      described_class.instance_variable_set(:@buffer, nil)
-      expect { described_class.flush }.not_to raise_error
-    end
-
-    it 'does nothing when buffer is empty' do
-      described_class.instance_variable_set(:@buffer, [])
-      described_class.instance_variable_set(:@mutex, Mutex.new)
-      expect(Legion::Logging::Shipper::FileTransport).not_to receive(:ship)
-      described_class.flush
-    end
-
-    it 'calls the transport with buffered events' do
-      described_class.instance_variable_set(:@mutex, Mutex.new)
-      described_class.instance_variable_set(:@buffer, [{ level: 'error', message: 'test' }])
-      allow(Legion::Logging::Shipper::FileTransport).to receive(:ship_batch).and_return(true)
-      described_class.flush
-      expect(Legion::Logging::Shipper::FileTransport).to have_received(:ship_batch).with([{ level: 'error', message: 'test' }])
-    end
-
-    it 'clears the buffer after flushing' do
-      described_class.instance_variable_set(:@mutex, Mutex.new)
-      described_class.instance_variable_set(:@buffer, [{ level: 'error', message: 'test' }])
-      allow(Legion::Logging::Shipper::FileTransport).to receive(:ship_batch).and_return(true)
-      described_class.flush
-      expect(described_class.instance_variable_get(:@buffer)).to be_empty
-    end
-
-    it 'retains the buffer when delivery returns false' do
-      described_class.instance_variable_set(:@mutex, Mutex.new)
-      described_class.instance_variable_set(:@buffer, [{ level: 'error', message: 'test' }])
-      allow(Legion::Logging::Shipper::FileTransport).to receive(:ship_batch).and_return(false)
-
-      described_class.flush
-
-      expect(described_class.instance_variable_get(:@buffer)).to eq([{ level: 'error', message: 'test' }])
-    end
-
-    it 'retains the buffer when delivery raises' do
-      described_class.instance_variable_set(:@mutex, Mutex.new)
-      described_class.instance_variable_set(:@buffer, [{ level: 'error', message: 'test' }])
-      allow(Legion::Logging::Shipper::FileTransport).to receive(:ship_batch).and_raise(StandardError, 'boom')
-
-      described_class.flush
-
-      expect(described_class.instance_variable_get(:@buffer)).to eq([{ level: 'error', message: 'test' }])
-    end
+  it 'does not deliver when disabled' do
+    config[:logging][:shipper][:enabled] = false
+    described_class.ship({ level: 'error', message: 'disabled' })
+    expect(described_class.flush).to be(true)
+    expect(shipped_events).to be_empty
   end
 
-  describe 'level filtering' do
-    before do
-      stub_const('Legion::Settings', Module.new)
-      allow(Legion::Settings).to receive(:[]).and_return(nil)
-      allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :enabled).and_return(true)
-      allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :transport).and_return('file')
-      allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :batch_size).and_return(100)
-      allow(Legion::Settings).to receive(:dig).with(:logging, :redactor, :custom_patterns).and_return(nil)
+  it 'does not initialize settings or deliver events before settings are loaded' do
+    initialized = false
+    allow(Legion::Settings).to receive(:loaded?).and_return(false)
+    allow(Legion::Settings).to receive(:dig) do |*keys|
+      initialized = true
+      config.dig(*keys)
     end
 
-    {
-      'debug' => %w[debug info warn error fatal],
-      'info'  => %w[info warn error fatal],
-      'warn'  => %w[warn error fatal],
-      'error' => %w[error fatal],
-      'fatal' => %w[fatal]
-    }.each do |min_level, shippable|
-      context "when minimum level is #{min_level}" do
-        before do
-          allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :levels).and_return([min_level])
-        end
-
-        shippable.each do |level|
-          it "ships #{level} events" do
-            described_class.ship({ level: level, message: 'test' })
-            buffer = described_class.instance_variable_get(:@buffer)
-            expect(buffer).not_to be_empty
-          end
-        end
-
-        (Legion::Logging::Shipper::LEVEL_ORDER - shippable).each do |level|
-          it "does not ship #{level} events" do
-            described_class.ship({ level: level, message: 'test' })
-            buffer = described_class.instance_variable_get(:@buffer)
-            expect(buffer.to_a).to be_empty
-          end
-        end
-      end
-    end
+    expect(described_class.start).to be(false)
+    described_class.ship({ level: 'error', message: 'before settings load' })
+    expect(described_class.flush).to be(true)
+    expect(shipped_events).to be_empty
+    expect(initialized).to be(false)
   end
 
-  describe 'transport selection' do
-    before do
-      stub_const('Legion::Settings', Module.new)
-      allow(Legion::Settings).to receive(:[]).and_return(nil)
-      allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :enabled).and_return(true)
-      allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :levels).and_return(['debug'])
-      allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :batch_size).and_return(1)
-      allow(Legion::Settings).to receive(:dig).with(:logging, :redactor, :custom_patterns).and_return(nil)
-    end
-
-    it 'uses file transport when configured' do
-      allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :transport).and_return('file')
-      allow(Legion::Logging::Shipper::FileTransport).to receive(:ship_batch).and_return(true)
-      described_class.instance_variable_set(:@mutex, Mutex.new)
-      described_class.instance_variable_set(:@buffer, [])
-      described_class.ship({ level: 'debug', message: 'test' })
-      expect(Legion::Logging::Shipper::FileTransport).to have_received(:ship_batch).with([{ level: 'debug', message: 'test' }])
-    end
-
-    it 'uses http transport when configured' do
-      allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :transport).and_return('http')
-      allow(Legion::Logging::Shipper::HttpTransport).to receive(:ship_batch).and_return(true)
-      described_class.instance_variable_set(:@mutex, Mutex.new)
-      described_class.instance_variable_set(:@buffer, [])
-      described_class.ship({ level: 'debug', message: 'test' })
-      expect(Legion::Logging::Shipper::HttpTransport).to have_received(:ship_batch).with([{ level: 'debug', message: 'test' }])
-    end
+  it 'filters below the minimum and preserves higher severity events' do
+    config[:logging][:shipper][:levels] = ['error']
+    described_class.ship({ level: 'warn', message: 'below minimum' })
+    described_class.ship({ level: 'error', message: 'at minimum' })
+    described_class.ship({ level: 'fatal', message: 'above minimum' })
+    expect(described_class.flush).to be(true)
+    expect(shipped_events.map { |event| event['message'] }).to eq(['at minimum', 'above minimum'])
   end
 
-  describe '.start' do
-    it 'preserves events buffered before the flush thread starts' do
-      stub_const('Legion::Settings', Module.new)
-      allow(Legion::Settings).to receive(:[]).and_return(nil)
-      allow(Legion::Settings).to receive(:dig).and_return(nil)
-      allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :enabled).and_return(true)
-      allow(Legion::Settings).to receive(:dig).with(:logging, :shipper, :flush_interval).and_return(60)
+  it 'redacts accepted events and flushes a partial batch without modifying the input' do
+    event = { level: 'error', message: 'SSN 123-45-6789' }
+    described_class.ship(event)
+    expect(described_class.flush).to be(true)
+    expect(shipped_events.first['message']).to include('[REDACTED]')
+    expect(event[:message]).to eq('SSN 123-45-6789')
+  end
 
-      described_class.instance_variable_set(:@buffer, [{ level: 'error', message: 'buffered first' }])
-      described_class.instance_variable_set(:@mutex, Mutex.new)
-      described_class.start
-
-      expect(described_class.instance_variable_get(:@buffer)).to eq([{ level: 'error', message: 'buffered first' }])
-      described_class.instance_variable_get(:@flush_thread)&.kill
-      described_class.instance_variable_set(:@flush_thread, nil)
+  it 'returns from the threshold-triggering ship while delivery is blocked on the worker' do
+    config[:logging][:shipper][:batch_size] = 1
+    entered = Queue.new
+    release = Queue.new
+    allow(transport).to receive(:ship_batch).and_wrap_original do |original, batch|
+      entered << Thread.current
+      release.pop
+      original.call(batch)
     end
+    producer = Thread.new { described_class.ship({ level: 'error', message: 'threshold' }) }
+    delivery_thread = entered.pop(timeout: 3)
+
+    expect(delivery_thread).not_to be_nil
+    expect(producer.join(1)).to equal(producer)
+    expect(delivery_thread).not_to equal(producer)
+    expect(shipped_events).to be_empty
+    release << true
+    expect(described_class.flush).to be(true)
+    expect(shipped_events.first['message']).to eq('threshold')
+  ensure
+    release&.<< true
+    producer&.join(3)
+  end
+
+  it 'counts in-flight events toward bounded backpressure and resumes after delivery' do
+    config[:logging][:shipper].merge!(batch_size: 1, buffer_size: 1)
+    entered = Queue.new
+    release = Queue.new
+    allow(transport).to receive(:ship_batch).and_wrap_original do |original, batch|
+      entered << true
+      release.pop
+      original.call(batch)
+    end
+    described_class.ship({ level: 'error', message: 'in flight' })
+    expect(entered.pop(timeout: 3)).to be(true)
+    producer = Thread.new { described_class.ship({ level: 'error', message: 'backpressured' }) }
+    expect(producer.join(0.05)).to be_nil
+
+    release << true
+    expect(producer.join(3)).to equal(producer)
+    release << true
+    expect(described_class.flush).to be(true)
+    expect(shipped_events.map { |event| event['message'] }).to eq(['in flight', 'backpressured'])
+  ensure
+    2.times { release&.<< true }
+    producer&.join(3)
+  end
+
+  it 'retains a failed batch and delivers it before newer events on the next flush' do
+    attempts = 0
+    allow(transport).to receive(:ship_batch).and_wrap_original do |original, batch|
+      attempts += 1
+      attempts == 1 ? false : original.call(batch)
+    end
+    described_class.ship({ level: 'error', message: 'retry me' })
+    expect(described_class.flush).to be(false)
+    described_class.ship({ level: 'error', message: 'newer' })
+    expect(described_class.flush).to be(true)
+    expect(shipped_events.map { |event| event['message'] }).to eq(['retry me', 'newer'])
+  end
+
+  it 'retries retained events when shutdown is called again after delivery fails' do
+    attempts = 0
+    allow(transport).to receive(:ship_batch).and_wrap_original do |original, batch|
+      attempts += 1
+      attempts == 1 ? false : original.call(batch)
+    end
+    described_class.ship({ level: 'error', message: 'recover during shutdown' })
+
+    expect(described_class.stop(timeout: 1)).to be(false)
+    expect(shipped_events).to be_empty
+    expect(described_class.stop(timeout: 1)).to be(true)
+    expect(shipped_events.map { |event| event['message'] }).to eq(['recover during shutdown'])
+  end
+
+  it 'times out a flush without moving blocked delivery onto the caller' do
+    config[:logging][:shipper][:batch_size] = 1
+    entered = Queue.new
+    release = Queue.new
+    allow(transport).to receive(:ship_batch).and_wrap_original do |original, batch|
+      entered << true
+      release.pop
+      original.call(batch)
+    end
+    described_class.ship({ level: 'error', message: 'slow delivery' })
+    expect(entered.pop(timeout: 3)).to be(true)
+    flusher = Thread.new { described_class.flush(timeout: 0.01) }
+    expect(flusher.join(1)).to equal(flusher)
+    expect(flusher.value).to be(false)
+    release << true
+    expect(described_class.flush).to be(true)
+    expect(shipped_events.first['message']).to eq('slow delivery')
+  ensure
+    release&.<< true
+    flusher&.join(3)
   end
 end

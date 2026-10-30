@@ -26,7 +26,7 @@ module Legion
             end
             true
           rescue StandardError => e
-            Legion::Logging.error("FileTransport ship failed: #{e.message}") if defined?(Legion::Logging)
+            Kernel.warn("FileTransport ship failed: #{e.message}")
             false
           end
 
@@ -40,6 +40,7 @@ module Legion
 
           def settings_path
             return nil unless defined?(Legion::Settings)
+            return nil unless Legion::Settings.respond_to?(:loaded?) ? Legion::Settings.loaded? : true
 
             Legion::Settings.dig(:logging, :shipper, :file, :path)
           end

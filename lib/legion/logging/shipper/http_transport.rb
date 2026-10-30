@@ -24,7 +24,7 @@ module Legion
             response = post(uri, body)
             response.is_a?(Net::HTTPSuccess)
           rescue StandardError => e
-            Legion::Logging.error("HttpTransport ship failed: #{e.message}") if defined?(Legion::Logging)
+            Kernel.warn("HttpTransport ship failed: #{e.message}")
             false
           end
 
@@ -36,7 +36,7 @@ module Legion
             apply_auth(req, uri)
 
             Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == 'https',
-                                                     open_timeout: 5, read_timeout: 10) do |http|
+                                                     open_timeout: 5, read_timeout: 10, write_timeout: 10) do |http|
               http.request(req, body)
             end
           end
@@ -67,12 +67,14 @@ module Legion
 
           def auth_token
             return nil unless defined?(Legion::Settings)
+            return nil unless Legion::Settings.respond_to?(:loaded?) ? Legion::Settings.loaded? : true
 
             Legion::Settings.dig(:logging, :shipper, :auth_token)
           end
 
           def resolve_endpoint
             return nil unless defined?(Legion::Settings)
+            return nil unless Legion::Settings.respond_to?(:loaded?) ? Legion::Settings.loaded? : true
 
             Legion::Settings.dig(:logging, :shipper, :endpoint)
           end

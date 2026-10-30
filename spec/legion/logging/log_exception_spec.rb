@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
+require 'stringio'
 
 RSpec.describe 'Legion::Logging.log_exception' do
   let(:error) do
@@ -221,6 +222,8 @@ RSpec.describe 'Legion::Logging.log_exception' do
       end
     end
     stub_const('Legion::Settings', settings_mod)
+    allow(Legion::Settings).to receive(:dig).and_return(nil)
+    allow(Legion::Settings).to receive(:dig).with(:logging, :redactor, :custom_patterns).and_return({})
     Legion::Settings.instance_variable_set(:@loader, fake_loader)
     allow(fake_loader).to receive(:dig).and_return(nil)
     allow(fake_loader).to receive(:dig).with(:logging, :redaction, :enabled).and_return(true)
@@ -231,10 +234,49 @@ RSpec.describe 'Legion::Logging.log_exception' do
     redacted_error = RuntimeError.new('SSN 123-45-6789')
     redacted_error.set_backtrace(error.backtrace)
 
-    expect(Legion::Logging.log).to receive(:error).with(include('[REDACTED]')).and_call_original
+    output = StringIO.new
+    Legion::Logging.log.reopen(output)
     Legion::Logging.log_exception(redacted_error)
 
+    expect(output.string).to include('[REDACTED]')
+    expect(output.string).not_to include('123-45-6789')
     expect(captured[:message]).to include('[REDACTED]')
     expect(captured[:message]).not_to include('123-45-6789')
+  end
+end
+
+RSpec.describe 'asynchronous exception delivery' do
+  before do
+    Legion::Logging.setup(level: 'debug', log_file: File::NULL, log_stdout: false, async: true)
+    Legion::Logging.log_writer = nil
+  end
+
+  after { Legion::Logging.exception_writer = nil }
+
+  %i[log_exception handle_exception].each do |method|
+    it "returns from #{method} while the exception publisher is blocked" do
+      entered = Queue.new
+      release = Queue.new
+      delivered = Queue.new
+      Legion::Logging.exception_writer = lambda do |event, **|
+        entered << Thread.current
+        release.pop
+        delivered << event
+      end
+      receiver = method == :log_exception ? Legion::Logging : Object.new.extend(Legion::Logging::Helper)
+      producer = Thread.new { receiver.public_send(method, RuntimeError.new('queued exception'), task_id: 'task-22') }
+
+      publishing_thread = entered.pop(timeout: 3)
+      expect(publishing_thread).not_to be_nil
+      expect(producer.join(1)).to equal(producer)
+      expect(publishing_thread).not_to equal(producer)
+      expect(delivered).to be_empty
+      release << true
+      expect(delivered.pop(timeout: 3)).to include(exception_class: 'RuntimeError', task_id: 'task-22')
+    ensure
+      release&.<< true
+      producer&.join(3)
+      Legion::Logging.stop_async_writer
+    end
   end
 end
