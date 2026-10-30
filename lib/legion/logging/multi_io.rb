@@ -3,8 +3,10 @@
 module Legion
   module Logging
     class MultiIO
+      attr_reader :targets
+
       def initialize(*targets)
-        @targets = targets.flatten
+        @targets = targets.flatten.freeze
       end
 
       def write(message)
