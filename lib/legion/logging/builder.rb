@@ -3,6 +3,7 @@
 require 'fileutils'
 require 'monitor'
 require_relative 'output_logger'
+require_relative 'rotation'
 
 module Legion
   module Logging
@@ -123,36 +124,37 @@ module Legion
       end
 
       def output(**options)
-        set_log(logfile: options[:log_file], log_stdout: options[:log_stdout])
+        set_log(logfile: options[:log_file], log_stdout: options[:log_stdout], rotation: options[:rotation],
+                shutdown_timeout: options.fetch(:shutdown_timeout, 2))
       end
 
       def log
         @log ||= set_log
       end
 
-      def set_log(logfile: nil, log_stdout: nil, **)
+      # A nil rotation option reads loaded Settings; false disables rotation.
+      def set_log(logfile: nil, log_stdout: nil, rotation: nil, shutdown_timeout: 2, **)
         with_lifecycle_lock do
-          return false if @async_writer && stop_async_writer == false
+          deadline = ::Process.clock_gettime(::Process::CLOCK_MONOTONIC) + shutdown_timeout if shutdown_timeout
+          return false if @async_writer && stop_async_writer(timeout: shutdown_timeout) == false
 
           previous_log = @log
+          rotation_opts = Legion::Logging::Rotation.resolve(raw: rotation.nil? ? Legion::Logging::Rotation.from_settings : rotation)
+          remaining = [deadline - ::Process.clock_gettime(::Process::CLOCK_MONOTONIC), 0].max if deadline
+          stdout = stdout_target(rotation_opts: rotation_opts, uses_stdout: !logfile || log_stdout != false, timeout: remaining)
+          return false if stdout == false
 
           if logfile && log_stdout != false
-            path = prepare_log_path(logfile)
             require_relative 'multi_io'
-            file = File.new(path, 'a')
-            file.sync = true
-            io = MultiIO.new($stdout, file)
+            io = Legion::Logging::MultiIO.new(stdout, open_log_file(path: prepare_log_path(logfile), rotation_opts: rotation_opts))
             @log = Legion::Logging::OutputLogger.new(io)
           elsif logfile
-            file = File.new(prepare_log_path(logfile), 'a')
-            file.sync = true
-            @log = Legion::Logging::OutputLogger.new(file)
+            @log = Legion::Logging::OutputLogger.new(open_log_file(path: prepare_log_path(logfile), rotation_opts: rotation_opts))
           else
-            @log = Legion::Logging::OutputLogger.new($stdout)
+            @log = Legion::Logging::OutputLogger.new(stdout)
           end
 
           @log.async_writer = @async_writer
-
           close_replaced_log(previous_log)
           @log
         end
@@ -210,13 +212,51 @@ module Legion
 
       def stop_async_writer(timeout: 2)
         with_lifecycle_lock do
-          return true unless @async_writer
+          deadline = ::Process.clock_gettime(::Process::CLOCK_MONOTONIC) + timeout if timeout
+          return false if @async_writer && @async_writer.stop(timeout: timeout) == false
 
-          @async_writer.stop(timeout: timeout)
+          remaining = [deadline - ::Process.clock_gettime(::Process::CLOCK_MONOTONIC), 0].max if deadline
+          flush_stdio_output!(timeout: remaining)
         end
       end
 
       private
+
+      def open_log_file(path:, rotation_opts:)
+        if rotation_opts[:enabled]
+          return Legion::Logging::RotatingFile.new(path: path, max_bytes: rotation_opts[:max_bytes], max_files: rotation_opts[:max_files])
+        end
+
+        file = File.new(path, 'a')
+        file.sync = true
+        file
+      end
+
+      def stdout_target(rotation_opts:, uses_stdout:, timeout:)
+        if rotation_opts[:enabled] && rotation_opts[:stdio]
+          return $stdout unless uses_stdout || equal?(Legion::Logging)
+
+          return Legion::Logging::StdioRotator.shared(max_bytes: rotation_opts[:max_bytes], max_files: rotation_opts[:max_files]) || $stdout
+        end
+
+        return false if equal?(Legion::Logging) && !Legion::Logging::StdioRotator.reset!(timeout: timeout)
+
+        $stdout
+      end
+
+      def flush_stdio_output!(timeout:) # rubocop:disable Naming/PredicateMethod -- Performs a drain; false signals its deadline.
+        deadline = ::Process.clock_gettime(::Process::CLOCK_MONOTONIC) + timeout if timeout
+        device = @log&.instance_variable_get(:@logdev)&.dev
+        targets = defined?(Legion::Logging::MultiIO) && device.is_a?(Legion::Logging::MultiIO) ? device.targets : [device]
+        captures = targets.grep(Legion::Logging::StdioRotator)
+        current = Legion::Logging::StdioRotator.current
+        captures << current if equal?(Legion::Logging) && current && !captures.include?(current)
+        captures.each do |capture|
+          remaining = [deadline - ::Process.clock_gettime(::Process::CLOCK_MONOTONIC), 0].max if deadline
+          return false if capture.flush(timeout: remaining) == false
+        end
+        true
+      end
 
       def with_lifecycle_lock
         lock = LIFECYCLE_MUTEX.synchronize { @lifecycle_lock ||= Monitor.new }

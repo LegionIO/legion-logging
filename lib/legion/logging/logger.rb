@@ -13,7 +13,7 @@ module Legion
 
       def initialize(level: 'info', log_file: nil, log_stdout: nil, lex: nil, trace: false, extended: false, trace_size: 4, format: :text, async: true, **opts)
         @lex = lex
-        set_log(logfile: log_file, log_stdout: log_stdout)
+        set_log(logfile: log_file, log_stdout: log_stdout, rotation: opts[:rotation])
         log_level(level)
         log_format(format: format, lex: lex, extended: extended, **opts)
         @color = opts[:color]

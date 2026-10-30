@@ -2,7 +2,7 @@
 
 Logging module for the [LegionIO](https://github.com/LegionIO/LegionIO) framework. Provides colorized console output via Rainbow, structured JSON logging, multi-output IO, and a consistent logging interface across all Legion gems and extensions.
 
-**Version**: 1.5.19
+**Version**: 1.5.21
 
 ## Installation
 
@@ -31,6 +31,71 @@ Legion::Logging.error('something went wrong')
 Legion::Logging.fatal('critical failure')
 ```
 
+### Log Rotation
+
+Managed file contents have a hard byte bound: **100 MiB per file with five archives** by
+default (`legion.log`, `legion.log.1` through `legion.log.5`), or **600 MiB per managed path**.
+The bound is `max_bytes * (max_files + 1)`, where `max_bytes` is `max_size_mb * 1024 * 1024`,
+rounded down to a positive byte count. Separate stdout, stderr, and configured log paths
+each have their own retention budget.
+
+This covers `log_file:` and eligible stdout/stderr files inherited from launchd, systemd
+`append:`, or shell `>>` redirects. Only append-mode regular inherited files qualify;
+pipes, terminals, and non-append redirects (`>`) remain unchanged. Eligible stderr is captured
+independently even when stdout is a pipe. The actual descriptors become bounded kernel pipes,
+so raw writes and inherited child-process writes also pass through the capped sinks without
+needing a logger call. Full pipes block producers; there is no unbounded Ruby byte queue.
+Raw syscall callers must handle short writes, as with any pipe.
+
+Writes are split before a file exceeds its limit. Oversized records can cross archive,
+line, and UTF-8 character boundaries; concatenate archives oldest-first followed by the active
+file to read the retained byte stream. Enabling or tightening rotation trims each oversized
+existing file in place to its newest bytes and deletes archives beyond `max_files`.
+Rotation/drain failures do not fall back to uncapped appends; drain/control APIs surface errors.
+
+File writes use a stable, zero-byte `<path>.lock` sidecar to coordinate devices and processes.
+All cooperating writers must use the same canonical path and limits; do not delete the lock
+while writers are alive. Regular data descriptors close between operations so idle devices
+cannot retain deleted archives. External replacement is followed on the next write.
+
+This is a bound on **Legion-managed file contents**, not an OS/filesystem quota. Filesystem
+allocation overhead, snapshots, external writers, hardlink aliases, and descriptors retained
+outside these devices are outside the bound. A fork without exec during an in-flight file
+operation can inherit such a descriptor; close inherited descriptors or exec before leaving
+the child idle. A strict volume-level disk-space guarantee requires a filesystem quota.
+
+```json
+{
+  "logging": {
+    "rotation": { "enabled": true, "max_size_mb": 100, "max_files": 5, "stdio": true }
+  }
+}
+```
+
+```ruby
+Legion::Logging.setup(log_file: './legion.log', rotation: { max_size_mb: 50, max_files: 3 })
+Legion::Logging.setup(log_file: './legion.log', rotation: false) # disable
+Legion::Logging.setup(rotation: { stdio: false }) # leave inherited stdout/stderr alone
+logger = Legion::Logging::Logger.new(log_file: './extension.log', rotation: { max_size_mb: 25 })
+```
+
+Omitting `rotation:` reads `logging.rotation` from already-loaded Settings, otherwise uses the
+defaults above. Instance loggers honor the same overrides, including `rotation: false`.
+
+Inherited-stream capture is process-wide. Instance opt-out does not detach capture owned by
+another logger; module-level `setup(rotation: false)` or `setup(rotation: { stdio: false })`
+explicitly disables it. Quiesce raw producers, including children, before disabling capture.
+Pre-drain timeout leaves capture active; a failure or timeout during final handle cleanup
+leaves it fail-closed rather than restoring an uncapped fallback and requires process restart.
+Forked children may write through the inherited pipes but cannot drain/reset parent workers
+or request a different capture policy. Fork-without-exec children also retain pipe read ends,
+which can delay `EPIPE` after a parent drain failure until those children close them or exit.
+
+Captured stdio is asynchronous even with `async: false`: call `stop_async_writer(timeout: 2)`
+**after the final raw stdout/stderr writes** to drain both layers before exit. This does not
+detach capture, and abrupt process termination is not a delivery guarantee. Setup, explicit
+rotation, and retention changes remain synchronous control operations.
+
 ### Async Logging
 
 By default, `setup` enables async logging: log calls enqueue output for a background writer, including fatal messages. Async does not mean wait-free. The queue holds at most 10,000 entries by default, and producers wait for capacity when it fills.
@@ -48,7 +113,7 @@ Legion::Logging.setup(level: 'info', async: false)
 
 Bounded backpressure is intentional: saturation blocks callers rather than dropping logs or allowing unbounded memory growth. A stalled destination can therefore stall producers once the queue fills. Buffer capacity limits queued entries, not their total byte size, and does not guarantee delivery across process termination.
 
-Use `Legion::Logging.stop_async_writer(timeout: 2)` during shutdown. It closes admission and asks the worker to drain accepted entries, returning `true` only after that worker exits. A deadline expiry returns `false` without killing the worker or draining on the caller; release the blocked destination and retry shutdown. Calling shutdown from a writer callback requests closure but returns `false` rather than joining itself.
+Use `Legion::Logging.stop_async_writer(timeout: 2)` during shutdown, after the final raw stdio writes. It closes async admission and returns `true` only after the writer exits and relevant captured-stdio sinks finish their drain, within one shared deadline. It also drains captured stdio when async logging is disabled. A drain deadline returns `false` without killing workers or draining on the caller; release the blocked destination and retry. Calling shutdown from a writer callback requests closure but returns `false` rather than joining itself.
 
 A successful stop means queued entries have been processed, not that a sink durably stored them or an external service acknowledged them. AsyncWriter reports sink/callback failures locally and does not automatically retry them. The Shipper's retained-batch retry behavior is separate.
 

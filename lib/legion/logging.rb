@@ -78,8 +78,11 @@ module Legion
 
       def setup(level: 'debug', format: :text, async: true, shutdown_timeout: 2, **options)
         with_lifecycle_lock do
+          deadline = ::Process.clock_gettime(::Process::CLOCK_MONOTONIC) + shutdown_timeout if shutdown_timeout
           return false if @async_writer && stop_async_writer(timeout: shutdown_timeout) == false
-          return false if output(**options) == false
+
+          remaining = [deadline - ::Process.clock_gettime(::Process::CLOCK_MONOTONIC), 0].max if deadline
+          return false if output(shutdown_timeout: remaining, **options) == false
 
           log_level(level)
           log_format(format: format, **options)
@@ -94,6 +97,7 @@ module Legion
             extended:    options.fetch(:extended, true),
             log_file:    options[:log_file],
             log_stdout:  options[:log_stdout],
+            rotation:    options[:rotation],
             include_pid: options.fetch(:include_pid, false),
             color:       @color
           }.freeze

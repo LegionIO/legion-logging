@@ -71,5 +71,79 @@ RSpec.describe Legion::Logging::Builder do
         expect(first_device.closed?).to be(true)
       end
     end
+
+    it 'honors instance rotation limits while draining through the async writer' do
+      Dir.mktmpdir do |dir|
+        path = File.join(dir, 'instance.log')
+        previous = "older record\n" * 100
+        File.write(path, previous)
+        logger = Legion::Logging::Logger.new(log_file: path, log_stdout: false, color: false,
+                                             rotation: { max_size_mb: 0.0005, max_files: 1 })
+        logger.info('new record')
+
+        expect(logger.stop_async_writer).to be(true)
+        expect(File.binread("#{path}.1")).to eq(previous.byteslice(-524, 524))
+        expect(File.read(path)).to include('new record')
+      ensure
+        logger&.stop_async_writer
+        logger&.log&.close
+      end
+    end
+
+    it 'lets an instance disable rotation despite enabled global settings' do
+      stub_const('Legion::Settings', Module.new do
+        def self.loaded? = true
+
+        def self.[](_key)
+          { rotation: { max_size_mb: 0.0005, max_files: 1 } }
+        end
+      end)
+
+      Dir.mktmpdir do |dir|
+        path = File.join(dir, 'disabled.log')
+        previous = "older record\n" * 100
+        File.write(path, previous)
+        logger = Legion::Logging::Logger.new(log_file: path, log_stdout: false, color: false, rotation: false)
+        logger.info('new record')
+
+        expect(logger.stop_async_writer).to be(true)
+        expect(File.exist?("#{path}.1")).to be(false)
+        expect(File.read(path)).to start_with(previous).and include('new record')
+      ensure
+        logger&.stop_async_writer
+        logger&.log&.close
+      end
+    end
+
+    it 'includes the downstream stdio drain in its shutdown deadline' do
+      Dir.mktmpdir do |dir|
+        path = File.join(dir, 'captured.log')
+        Legion::Logging.setup(log_file: File::NULL, log_stdout: false, color: false)
+        output = File.new(path, 'ab')
+        capture = Legion::Logging::StdioRotator.new(max_bytes: 4096, max_files: 1, stdout: output, stderr: output)
+        allow(Legion::Logging::StdioRotator).to receive(:current).and_return(capture)
+        Legion::Logging.log.reopen(capture)
+        lock = File.new("#{path}.lock", 'ab')
+        lock.flock(File::LOCK_EX)
+        Legion::Logging.info('queued through both workers')
+
+        started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        expect(Legion::Logging.stop_async_writer(timeout: 0.01)).to be(false)
+        expect(Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).to be < 0.5
+        expect(File.binread(path)).to be_empty
+        lock.flock(File::LOCK_UN)
+
+        expect(Legion::Logging.stop_async_writer(timeout: 2)).to be(true)
+        expect(File.binread(path)).to include('queued through both workers')
+      ensure
+        lock&.flock(File::LOCK_UN)
+        lock&.close
+        Legion::Logging.stop_async_writer
+        capture&.shutdown(timeout: 2)
+        Legion::Logging.log.reopen(File::NULL)
+        allow(Legion::Logging::StdioRotator).to receive(:current).and_call_original
+        output&.close
+      end
+    end
   end
 end

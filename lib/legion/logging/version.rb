@@ -2,6 +2,6 @@
 
 module Legion
   module Logging
-    VERSION = '1.5.19'
+    VERSION = '1.5.21'
   end
 end

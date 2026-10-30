@@ -18,7 +18,8 @@ Legion::Logging (singleton module)
 ├── SIEMExporter      # PHI-redacting SIEM export (Splunk HEC, ELK)
 ├── Shipper           # Bounded batch-delivery worker (file/HTTP transports)
 ├── Redactor          # PII/PHI + secret pattern redaction (opt-in)
-└── MultiIO           # Synchronous, sequential writes to multiple destinations
+├── MultiIO           # Synchronous, sequential writes to multiple destinations
+└── Rotation          # RotatingFile (log_file) + shared StdioRotator (redirected stdout/stderr)
 
 # Module-level writer lambdas (pluggable forwarding slots)
 Legion::Logging.log_writer       # ->(event, routing_key:, headers:, properties:) {}
@@ -41,6 +42,7 @@ Legion::Logging.exception_writer # ->(event, routing_key:, headers:, properties:
 - **Forwarding levels** — `logging.transport.log_levels` accepts strings/symbols; absent or empty lists default to warn/error/fatal. Settings guards use defaults while Settings is unloaded rather than initializing it.
 - **Synchronous APIs** — `MultiIO`, direct transport delivery, SIEM export, and direct hook dispatch remain synchronous. Shipper filtering/redaction run on its caller; bounded batch delivery runs on its worker.
 - **EventBuilder** — Structured event hashes from log context (caller, exception, lex identity). `fingerprint` produces MD5 for dedup.
+- **Rotation** — Hard managed-content cap: 100 MiB per file plus five archives (600 MiB/path). `RotatingFile` splits writes, trims oversized existing files, prunes excess archives, and coordinates same-path/same-policy writers through a persistent zero-byte `.lock`. Regular data FDs close between operations. Eligible append-mode inherited stdout/stderr become bounded pipes drained by dedicated capped sinks, including raw-only and child writes; saturation blocks, errors fail closed. `stop_async_writer` drains both layers under one deadline, including sync/file-only module logging; call it after final raw writes. Capture is process-wide; disable only with quiescent producers. Pre-drain timeout keeps capture active; final cleanup failure/timeout requires restart. Instance loggers survive disable/re-enable. Forked children cannot control parent workers or change their policy. File contents are bounded, not filesystem metadata/snapshots, external writers/aliases, or externally held/inherited descriptors; a volume-level guarantee needs an OS quota.
 
 ## Role in LegionIO
 

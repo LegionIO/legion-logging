@@ -1,5 +1,35 @@
 # Legion::Logging Changelog
 
+## [1.5.21] - 2026-10-30
+
+### Changed
+- Enforce a hard retained-byte cap for managed log files: split oversized writes before the per-file limit, trim existing oversized files to their newest bytes, and immediately prune excess archives.
+- Capture eligible inherited stdout/stderr through bounded kernel pipes, including raw descriptor and child-process writes; full pipes backpressure producers instead of allocating an unbounded byte queue.
+- Coordinate same-path file writers with persistent zero-byte lock sidecars and close regular data descriptors between operations so idle devices cannot pin deleted archives.
+- Fail closed on rotation or drain errors rather than append beyond the cap. The bound covers managed file contents, not filesystem metadata, snapshots, external writers, hardlink aliases, or externally retained descriptors.
+
+### Fixed
+- Include downstream raw-stdio drains in `stop_async_writer` deadlines, including synchronous and file-only module logging.
+- Preserve capture after pre-drain timeouts; wait for worker cleanup before reporting successful disable, and prevent inherited children from controlling parent workers or silently changing their retention policy.
+- Preserve existing instance loggers across process-capture disable/re-enable and close destinations if fail-closed descriptor reattachment itself fails.
+
+## [1.5.20] - 2026-10-29
+
+### Added
+- Size-based log rotation, on by default (100 MiB x 5 archives), configurable via `logging.rotation`
+  (`enabled`, `max_size_mb`, `max_files`, `stdio`) or `setup(rotation: {...})`; `rotation: false` disables it
+- `Legion::Logging::RotatingFile`: self-rotating append-mode device used for `log_file:`; reopens if another
+  process rotated the path
+- `Legion::Logging::StdioRotator`: rotates the file behind stdout/stderr when a supervisor (launchd
+  `StandardOutPath`, systemd `append:`) redirected them to an append-mode regular file, using `IO#reopen` so
+  raw stderr output follows the new file. Checks are logger-write-driven, not a hard disk quota.
+
+### Fixed
+- Preserve current async OutputLogger routing, lifecycle locks, shutdown deadlines, and forwarding settings while integrating rotation (PR #21).
+- Honor instance logger rotation overrides and opt-out; rotate distinct stderr files independently, including when stdout is a pipe.
+- Preserve nested Settings lookup guards, normalize invalid limits, and reopen remembered paths after external rotation.
+- Keep non-regular devices untouched and report rotation failures without discarding the incoming message.
+
 ## [1.5.19] - 2026-10-29
 
 ### Changed
