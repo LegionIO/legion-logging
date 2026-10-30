@@ -13,6 +13,7 @@ module Legion
         exchanges|queues|messages|data|builders|tools|adapters|engines|
         formatters|parsers|middleware)/
       }x
+      LOGGING_PATH = __dir__
 
       def trace(raw_message = nil, size: @trace_size, log_caller: true)
         return unless @trace_enabled
@@ -25,18 +26,24 @@ module Legion
         elsif log_caller
           message.concat Rainbow(caller_locations[0..size]).cyan.underline
         end
-        log.unknown(message)
+        unknown(message)
       end
 
       def debug(message = nil, task_id: nil, conv_id: nil, request_id: nil, exchange_id: nil, chain_id: nil, **_ctx)
         return unless log.level < 1
 
         message = yield if message.nil? && block_given?
+        if async_producer?
+          return defer_log_call(receiver: self, method_name: :debug, arguments: [message],
+                                keywords: { task_id: task_id, conv_id: conv_id, request_id: request_id,
+                                            exchange_id: exchange_id, chain_id: chain_id })
+        end
+
         raw = maybe_redact(message)
         formatted = format_message_for_level(:debug, raw)
         with_context_ids(task_id: task_id, conv_id: conv_id, request_id: request_id,
                          exchange_id: exchange_id, chain_id: chain_id) do
-          write_async_or_sync(:debug, formatted, raw)
+          write_async_or_sync(:debug, formatted, raw, writer_context: build_writer_context(:debug, raw))
         end
       end
 
@@ -44,11 +51,17 @@ module Legion
         return unless log.level < 2
 
         message = yield if message.nil? && block_given?
+        if async_producer?
+          return defer_log_call(receiver: self, method_name: :info, arguments: [message],
+                                keywords: { task_id: task_id, conv_id: conv_id, request_id: request_id,
+                                            exchange_id: exchange_id, chain_id: chain_id })
+        end
+
         raw = maybe_redact(message)
         formatted = format_message_for_level(:info, raw)
         with_context_ids(task_id: task_id, conv_id: conv_id, request_id: request_id,
                          exchange_id: exchange_id, chain_id: chain_id) do
-          write_async_or_sync(:info, formatted, raw)
+          write_async_or_sync(:info, formatted, raw, writer_context: build_writer_context(:info, raw))
         end
       end
 
@@ -56,6 +69,12 @@ module Legion
         return unless log.level < 3
 
         message = yield if message.nil? && block_given?
+        if async_producer?
+          return defer_log_call(receiver: self, method_name: :warn, arguments: [message],
+                                keywords: { task_id: task_id, conv_id: conv_id, request_id: request_id,
+                                            exchange_id: exchange_id, chain_id: chain_id })
+        end
+
         raw = maybe_redact(message)
         formatted = format_message_for_level(:warn, raw)
         with_context_ids(task_id: task_id, conv_id: conv_id, request_id: request_id,
@@ -68,6 +87,12 @@ module Legion
         return unless log.level < 4
 
         message = yield if message.nil? && block_given?
+        if async_producer?
+          return defer_log_call(receiver: self, method_name: :error, arguments: [message],
+                                keywords: { task_id: task_id, conv_id: conv_id, request_id: request_id,
+                                            exchange_id: exchange_id, chain_id: chain_id })
+        end
+
         raw = maybe_redact(message)
         formatted = format_message_for_level(:error, raw)
         with_context_ids(task_id: task_id, conv_id: conv_id, request_id: request_id,
@@ -80,6 +105,12 @@ module Legion
         return unless log.level < 5
 
         message = yield if message.nil? && block_given?
+        if async_producer?
+          return defer_log_call(receiver: self, method_name: :fatal, arguments: [message],
+                                keywords: { task_id: task_id, conv_id: conv_id, request_id: request_id,
+                                            exchange_id: exchange_id, chain_id: chain_id })
+        end
+
         raw = maybe_redact(message)
         formatted = format_message_for_level(:fatal, raw)
         with_context_ids(task_id: task_id, conv_id: conv_id, request_id: request_id,
@@ -90,11 +121,17 @@ module Legion
 
       def unknown(message = nil, task_id: nil, conv_id: nil, request_id: nil, exchange_id: nil, chain_id: nil, **_ctx)
         message = yield if message.nil? && block_given?
+        if async_producer?
+          return defer_log_call(receiver: self, method_name: :unknown, arguments: [message],
+                                keywords: { task_id: task_id, conv_id: conv_id, request_id: request_id,
+                                            exchange_id: exchange_id, chain_id: chain_id })
+        end
+
         raw = maybe_redact(message)
         formatted = format_message_for_level(:unknown, raw)
         with_context_ids(task_id: task_id, conv_id: conv_id, request_id: request_id,
                          exchange_id: exchange_id, chain_id: chain_id) do
-          write_async_or_sync(:unknown, formatted, raw)
+          write_async_or_sync(:unknown, formatted, raw, writer_context: build_writer_context(:unknown, raw))
         end
       end
 
@@ -103,6 +140,11 @@ module Legion
         level = level.to_sym
         message = yield if message.nil? && block_given?
         return if message.nil?
+        if async_producer?
+          return defer_log_call(receiver: self, method_name: :emit_tagged, arguments: [level, message],
+                                keywords: { segments: segments, method_ctx: method_ctx, task_id: task_id, conv_id: conv_id,
+                                            request_id: request_id, exchange_id: exchange_id, chain_id: chain_id })
+        end
 
         raw = maybe_redact(message)
         formatted = format_message_for_level(level, raw)
@@ -110,23 +152,21 @@ module Legion
         with_tagged_context(segments, method_ctx) do
           with_context_ids(task_id: task_id, conv_id: conv_id, request_id: request_id,
                            exchange_id: exchange_id, chain_id: chain_id) do
-            ctx = %i[warn error fatal].include?(level) ? build_writer_context(level, raw) : nil
+            ctx = build_writer_context(level, raw)
             writer = @async_writer
             caller_trace = capture_runner_trace_for_async
-            if writer&.alive?
-              writer.push(AsyncWriter::LogEntry.new(
-                            level: level, message: formatted, writer_context: ctx,
-                            segments: Thread.current[:legion_log_segments],
-                            method_ctx: Thread.current[:legion_log_method],
-                            caller_trace: caller_trace,
-                            conv_id: Thread.current[:legion_log_conv_id],
-                            request_id: Thread.current[:legion_log_request_id],
-                            exchange_id: Thread.current[:legion_log_exchange_id],
-                            chain_id: Thread.current[:legion_log_chain_id]
-                          ))
+            if @async || writer
+              push_async_entry(entry: AsyncWriter::LogEntry.new(force: true, level: level, message: formatted, writer_context: ctx,
+                                                                segments: Thread.current[:legion_log_segments],
+                                                                method_ctx: Thread.current[:legion_log_method],
+                                                                caller_trace: caller_trace,
+                                                                conv_id: Thread.current[:legion_log_conv_id],
+                                                                request_id: Thread.current[:legion_log_request_id],
+                                                                exchange_id: Thread.current[:legion_log_exchange_id],
+                                                                chain_id: Thread.current[:legion_log_chain_id]))
             else
               with_caller_trace(caller_trace) { write_forced(level, formatted) }
-              fire_log_writer(level, raw) if ctx
+              fire_log_writer(level, raw, event: ctx[:event]) if ctx
             end
           end
         end
@@ -141,6 +181,14 @@ module Legion
                         gem_name: nil, lex_version: nil, gem_path: nil,
                         source_code_uri: nil, handled: false, payload_summary: nil,
                         task_id: nil, backtrace_limit: nil, **extra)
+        if async_producer?
+          return defer_log_call(receiver: self, method_name: :log_exception, arguments: [exception],
+                                keywords: { level: level, lex: lex, component_type: component_type, gem_name: gem_name,
+                                            lex_version: lex_version, gem_path: gem_path, source_code_uri: source_code_uri,
+                                            handled: handled, payload_summary: payload_summary, task_id: task_id,
+                                            backtrace_limit: backtrace_limit, **extra })
+        end
+
         level = level.to_sym if level.respond_to?(:to_sym)
         # 1. Log human-readable line + backtrace via async writer
         msg = exception.respond_to?(:message) ? exception.message : exception.to_s
@@ -170,13 +218,52 @@ module Legion
         event = Legion::Logging::Redactor.redact(event) if defined?(Legion::Logging::Redactor)
 
         # 4. Publish rich event via exception_writer
-        publish_exception_event(event, level)
+        publish_exception(event: event, level: level)
       rescue StandardError => e
         if respond_to?(:log) && log.respond_to?(:warn)
           log.warn("Failed to publish structured exception event: #{e.class}: #{e.message}")
         else
           warn("Failed to publish structured exception event: #{e.class}: #{e.message}")
         end
+      end
+
+      def publish_exception(event:, level:)
+        lex_name = event[:lex] || 'core'
+        component = event[:component_type] || :unknown
+        options = {
+          routing_key: "legion.logging.exception.#{level}.#{lex_name}.#{component}",
+          headers:     build_exception_headers(event, component, level),
+          properties:  build_exception_properties(event, level)
+        }
+        callback = Legion::Logging.exception_writer
+        writer = @async_writer
+        return push_async_entry(entry: AsyncWriter::EventEntry.new(callback: callback, event: event, options: options)) if @async || writer
+
+        callback.call(event, **options)
+      end
+
+      def async_producer?
+        (@async == true || !@async_writer.nil?) && !@async_writer&.current_thread?
+      end
+
+      def defer_log_call(receiver:, method_name:, arguments:, keywords:)
+        return false unless async_producer?
+        raise ClosedQueueError, 'async logging writer is unavailable' unless @async_writer&.alive?
+
+        context = Legion::Logging::AsyncWriter::CALL_THREAD_KEYS.to_h do |key|
+          [key, Legion::Logging::AsyncWriter.snapshot_value(value: Thread.current[key])]
+        end
+        location = caller_locations(1, 16).find do |frame|
+          path = frame.absolute_path || frame.path
+          !path.start_with?(LOGGING_PATH)
+        end
+        context[:legion_log_origin] = { location: location, timestamp: Time.now.utc, thread: Thread.current.object_id }
+        push_async_entry(entry: Legion::Logging::AsyncWriter::CallEntry.new(
+          receiver: receiver, method_name: method_name,
+          arguments: arguments.map { |value| Legion::Logging::AsyncWriter.snapshot_value(value: value) },
+          keywords: keywords.transform_values { |value| Legion::Logging::AsyncWriter.snapshot_value(value: value) },
+          context: context
+        ))
       end
 
       def thread(kvl: false, **_opts)
@@ -192,8 +279,9 @@ module Legion
       def resolve_backtrace_limit(explicit_limit)
         return explicit_limit unless explicit_limit.nil?
         return nil unless defined?(Legion::Settings)
+        return nil unless Legion::Settings.respond_to?(:loaded?) ? Legion::Settings.loaded? : true
 
-        Legion::Settings[:logging][:backtrace_limit]
+        Legion::Settings.dig(:logging, :backtrace_limit)
       end
 
       def build_exception_log_message(exception, msg, backtrace_limit)
@@ -291,30 +379,35 @@ module Legion
       def write_async_or_sync(level, formatted_message, raw_message, writer_context: nil)
         writer = @async_writer
         caller_trace = capture_runner_trace_for_async
-        if writer&.alive?
-          queued = writer.push(AsyncWriter::LogEntry.new(
-                                 level:          level,
-                                 message:        formatted_message,
-                                 writer_context: writer_context,
-                                 segments:       Thread.current[:legion_log_segments],
-                                 method_ctx:     Thread.current[:legion_log_method],
-                                 caller_trace:   caller_trace,
-                                 conv_id:        Thread.current[:legion_log_conv_id],
-                                 request_id:     Thread.current[:legion_log_request_id],
-                                 exchange_id:    Thread.current[:legion_log_exchange_id],
-                                 chain_id:       Thread.current[:legion_log_chain_id]
-                               ))
-          return if queued
+        if @async || writer
+          return push_async_entry(entry: AsyncWriter::LogEntry.new(force: false, level:          level,
+                                                                   message:        formatted_message,
+                                                                   writer_context: writer_context,
+                                                                   segments:       Thread.current[:legion_log_segments],
+                                                                   method_ctx:     Thread.current[:legion_log_method],
+                                                                   caller_trace:   caller_trace,
+                                                                   conv_id:        Thread.current[:legion_log_conv_id],
+                                                                   request_id:     Thread.current[:legion_log_request_id],
+                                                                   exchange_id:    Thread.current[:legion_log_exchange_id],
+                                                                   chain_id:       Thread.current[:legion_log_chain_id]))
         end
 
         with_caller_trace(caller_trace) do
           log.public_send(level, formatted_message)
-          fire_log_writer(level, raw_message) if writer_context
+          fire_log_writer(level, raw_message, event: writer_context[:event]) if writer_context
         end
       end
 
+      def push_async_entry(entry:) # rubocop:disable Naming/PredicateMethod
+        writer = @async_writer
+        raise ClosedQueueError, 'async logging writer is unavailable' unless writer&.alive? && writer.push(entry)
+
+        true
+      end
+
       def capture_runner_trace_for_async
-        build_runner_trace(caller_locations(5, 1)&.first)
+        location = Thread.current[:legion_log_origin]&.[](:location) || caller_locations(5, 1)&.first
+        build_runner_trace(location)
       end
 
       def with_caller_trace(caller_trace)
@@ -350,19 +443,35 @@ module Legion
         }
       end
 
-      def publish_exception_event(event, level)
-        lex_name = event[:lex] || 'core'
-        comp     = event[:component_type] || :unknown
-        routing_key = "legion.logging.exception.#{level}.#{lex_name}.#{comp}"
-        headers     = build_exception_headers(event, comp, level)
-        properties  = build_exception_properties(event, level)
-        Legion::Logging.exception_writer.call(event, routing_key: routing_key, headers: headers, properties: properties)
+      def forward_level?(level)
+        forwardable_log_levels.include?(level.to_sym)
+      end
+
+      # Levels whose logs build a structured event for the transport bus / Hooks.
+      # Runtime override: logging.transport.log_levels (Array of level names).
+      # Falls back to Settings.default[:forward_log_levels] (warn/error/fatal).
+      def forwardable_log_levels
+        default = Legion::Logging::Settings::DEFAULT_FORWARD_LOG_LEVELS
+        return default unless defined?(Legion::Settings)
+        return default unless Legion::Settings.respond_to?(:loaded?) ? Legion::Settings.loaded? : true
+
+        configured = Legion::Settings.dig(:logging, :transport, :log_levels)
+        return default unless configured.is_a?(Array) && !configured.empty?
+
+        configured.map { |lvl| lvl.to_s.to_sym }
+      rescue StandardError => e
+        Kernel.warn("Legion::Logging forwarding configuration failed: #{e.message}")
+        default
       end
 
       def build_writer_context(level, message)
+        # Cheap ivar/flag checks first: when nothing consumes forwarded events
+        # (the common case) we return before touching Settings, keeping the
+        # hot debug/info path allocation- and lookup-free.
         has_writer = !Legion::Logging.instance_variable_get(:@log_writer).nil?
         has_hooks = defined?(Legion::Logging::Hooks) && Legion::Logging::Hooks.enabled?
         return nil unless has_writer || has_hooks
+        return nil unless forward_level?(level)
 
         lex_val  = instance_variable_defined?(:@lex) ? @lex : nil
         lex_segs = Thread.current[:legion_log_segments] || (instance_variable_defined?(:@lex_segments) ? @lex_segments : nil)
@@ -377,17 +486,7 @@ module Legion
         { level: level, event: event }
       end
 
-      def fire_log_writer(level, message)
-        lex_val  = instance_variable_defined?(:@lex) ? @lex : nil
-        lex_segs = Thread.current[:legion_log_segments] || (instance_variable_defined?(:@lex_segments) ? @lex_segments : nil)
-
-        event = Legion::Logging::EventBuilder.build(
-          level:         level,
-          message:       message,
-          lex:           lex_val,
-          lex_segments:  lex_segs,
-          caller_offset: 4
-        )
+      def fire_log_writer(level, message, event:)
         lex_name = event[:lex] || 'core'
         component = event.dig(:caller, :file).to_s[COMPONENT_REGEX, 1] || 'unknown'
         routing_key = "legion.logging.log.#{level}.#{lex_name}.#{component}"

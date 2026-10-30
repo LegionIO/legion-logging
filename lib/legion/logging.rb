@@ -76,37 +76,38 @@ module Legion
         Hooks.clear_hooks!
       end
 
-      def setup(level: 'debug', format: :text, async: true, **options)
-        output(**options)
-        log_level(level)
-        log_format(format: format, **options)
-        @color = options[:color]
-        @color = format != :json && (options[:color] || (options[:color].nil? && options[:log_file].nil?))
-        @current_settings = {
-          level:       level,
-          format:      format.to_sym,
-          async:       async,
-          trace:       options.fetch(:trace, true),
-          trace_size:  options.fetch(:trace_size, 4),
-          extended:    options.fetch(:extended, true),
-          log_file:    options[:log_file],
-          log_stdout:  options[:log_stdout],
-          rotation:    options[:rotation],
-          include_pid: options.fetch(:include_pid, false),
-          color:       @color
-        }.freeze
-        @configuration_generation = configuration_generation + 1
-        Legion::Logging::Redactor.refresh_patterns! if defined?(Legion::Logging::Redactor)
-        if async
-          buffer = if defined?(Legion::Settings) && Legion::Settings.respond_to?(:[])
-                     logging_settings = Legion::Settings[:logging]
-                     async_settings = logging_settings[:async] if logging_settings.is_a?(Hash)
-                     async_settings[:buffer_size] if async_settings.is_a?(Hash)
-                   end
-          buffer ||= 10_000
-          start_async_writer(buffer_size: buffer)
-        else
-          stop_async_writer
+      def setup(level: 'debug', format: :text, async: true, shutdown_timeout: 2, **options)
+        with_lifecycle_lock do
+          return false if @async_writer && stop_async_writer(timeout: shutdown_timeout) == false
+          return false if output(**options) == false
+
+          log_level(level)
+          log_format(format: format, **options)
+          @color = options[:color]
+          @color = format != :json && (options[:color] || (options[:color].nil? && options[:log_file].nil?))
+          @current_settings = {
+            level:       level,
+            format:      format.to_sym,
+            async:       async,
+            trace:       options.fetch(:trace, true),
+            trace_size:  options.fetch(:trace_size, 4),
+            extended:    options.fetch(:extended, true),
+            log_file:    options[:log_file],
+            log_stdout:  options[:log_stdout],
+            rotation:    options[:rotation],
+            include_pid: options.fetch(:include_pid, false),
+            color:       @color
+          }.freeze
+          @configuration_generation = configuration_generation + 1
+          Legion::Logging::Redactor.refresh_patterns! if defined?(Legion::Logging::Redactor)
+          if async
+            start_async_writer(buffer_size: Legion::Logging::Settings.async_buffer_size)
+          else
+            @async_writer = nil
+            @async = false
+            log.async_writer = nil
+            true
+          end
         end
       end
     end

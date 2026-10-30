@@ -157,8 +157,8 @@ RSpec.describe Legion::Logging::Redactor do
   end
 
   describe 'custom patterns' do
-    before { described_class.send(:reset_pattern_cache!) }
-    after  { described_class.send(:reset_pattern_cache!) }
+    before { described_class.refresh_patterns! }
+    after  { described_class.refresh_patterns! }
 
     it 'applies custom patterns from Legion::Settings when available' do
       stub_const('Legion::Settings', Module.new)
@@ -171,17 +171,41 @@ RSpec.describe Legion::Logging::Redactor do
       expect(result).not_to include('U123456789')
     end
 
+    it 'uses default redaction without initializing settings and picks up custom patterns after loading' do
+      loaded = false
+      initialized = false
+      stub_const('Legion::Settings', Module.new)
+      allow(Legion::Settings).to receive(:loaded?) { loaded }
+      allow(Legion::Settings).to receive(:dig) do
+        initialized = true unless loaded
+        { 'member_id' => '\bU\d{9}\b' }
+      end
+
+      expect(described_class.redact_string('member U123456789 user@example.com'))
+        .to eq('member U123456789 [REDACTED]')
+      expect(initialized).to be(false)
+
+      loaded = true
+
+      expect(described_class.redact_string('member U123456789 user@example.com'))
+        .to eq('member [REDACTED] [REDACTED]')
+    end
+
     it 'skips invalid regex patterns gracefully' do
       stub_const('Legion::Settings', Module.new)
       allow(Legion::Settings).to receive(:[]).and_return(nil)
       allow(Legion::Settings).to receive(:dig).with(:logging, :redactor, :custom_patterns)
                                               .and_return({ 'bad' => '[invalid(' })
 
-      expect { described_class.redact_string('hello') }.not_to raise_error
+      result = nil
+      expect { result = described_class.redact_string('hello') }.to output(/skipping invalid pattern bad/).to_stderr
+      expect(result).to eq('hello')
     end
 
-    it 'returns empty hash when Legion::Settings is not defined' do
-      expect(described_class.send(:custom_patterns)).to eq({})
+    it 'uses default redaction when Legion::Settings is not defined' do
+      hide_const('Legion::Settings')
+      expect(described_class.redact_string('member U123456789 user@example.com'))
+        .to eq('member U123456789 [REDACTED]')
     end
 
     it 'refreshes cached patterns without restarting the process' do
@@ -201,8 +225,8 @@ RSpec.describe Legion::Logging::Redactor do
   end
 
   describe 'vault and credential patterns' do
-    before { described_class.send(:reset_pattern_cache!) }
-    after  { described_class.send(:reset_pattern_cache!) }
+    before { described_class.refresh_patterns! }
+    after  { described_class.refresh_patterns! }
 
     it 'redacts Vault tokens' do
       str = 'token was hvs.CAESIJx7ZM_this_is_fake_ABCdef1234567890'

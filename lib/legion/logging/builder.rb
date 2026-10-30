@@ -1,11 +1,16 @@
 # frozen_string_literal: true
 
 require 'fileutils'
+require 'monitor'
+require_relative 'output_logger'
 require_relative 'rotation'
 
 module Legion
   module Logging
     module Builder
+      LIFECYCLE_MUTEX = Mutex.new
+      private_constant :LIFECYCLE_MUTEX
+
       def log_format(format: :text, include_pid: false, **)
         @format = format.to_sym
         if @format == :json
@@ -21,11 +26,19 @@ module Legion
 
       def json_format(include_pid: false)
         log.formatter = proc do |severity, datetime, _progname, msg|
+          origin = Thread.current[:legion_log_origin]
+          if origin
+            timestamp = origin[:timestamp]
+            thread_id = origin[:thread]
+          else
+            timestamp = datetime.utc
+            thread_id = Thread.current.object_id
+          end
           entry = {
-            timestamp: datetime.utc.iso8601(3),
+            timestamp: timestamp.iso8601(3),
             level:     severity.downcase,
             message:   msg.is_a?(String) ? msg.gsub(/\e\[[0-9;]*m/, '') : msg.to_s,
-            thread:    Thread.current.object_id
+            thread:    thread_id
           }
           entry[:pid] = ::Process.pid if include_pid
           segments = Thread.current[:legion_log_segments]
@@ -49,6 +62,7 @@ module Legion
 
       def text_format(include_pid: false, **options)
         log.formatter = proc do |severity, datetime, _progname, msg|
+          datetime = Thread.current[:legion_log_origin]&.[](:timestamp)&.getlocal || datetime
           lex_name = resolve_lex_tag(options)
           runner_trace = Thread.current[:legion_log_caller] || build_runner_trace if lex_name
 
@@ -117,41 +131,29 @@ module Legion
         @log ||= set_log
       end
 
-      # rotation: nil reads Legion::Settings[:logging][:rotation]; false disables;
-      # a Hash overrides individual keys (see Legion::Logging::Rotation::DEFAULTS).
+      # A nil rotation option reads loaded Settings; false disables rotation.
       def set_log(logfile: nil, log_stdout: nil, rotation: nil, **)
-        previous_log = @log
-        rotation_opts = Rotation.resolve(rotation.nil? ? Rotation.from_settings : rotation)
+        with_lifecycle_lock do
+          return false if @async_writer && stop_async_writer == false
 
-        if logfile && log_stdout != false
-          require_relative 'multi_io'
-          io = MultiIO.new(stdout_target(rotation_opts), open_log_file(prepare_log_path(logfile), rotation_opts))
-          @log = ::Logger.new(io)
-        elsif logfile
-          @log = ::Logger.new(open_log_file(prepare_log_path(logfile), rotation_opts))
-        else
-          @log = ::Logger.new(stdout_target(rotation_opts))
+          previous_log = @log
+          rotation_opts = Legion::Logging::Rotation.resolve(raw: rotation.nil? ? Legion::Logging::Rotation.from_settings : rotation)
+
+          if logfile && log_stdout != false
+            require_relative 'multi_io'
+            io = Legion::Logging::MultiIO.new(stdout_target(rotation_opts: rotation_opts),
+                                              open_log_file(path: prepare_log_path(logfile), rotation_opts: rotation_opts))
+            @log = Legion::Logging::OutputLogger.new(io)
+          elsif logfile
+            @log = Legion::Logging::OutputLogger.new(open_log_file(path: prepare_log_path(logfile), rotation_opts: rotation_opts))
+          else
+            @log = Legion::Logging::OutputLogger.new(stdout_target(rotation_opts: rotation_opts))
+          end
+
+          @log.async_writer = @async_writer
+          close_replaced_log(previous_log)
+          @log
         end
-
-        close_replaced_log(previous_log)
-        @log
-      end
-
-      def open_log_file(path, rotation_opts)
-        return RotatingFile.new(path, max_bytes: rotation_opts[:max_bytes], max_files: rotation_opts[:max_files]) if rotation_opts[:enabled]
-
-        file = File.new(path, 'a')
-        file.sync = true
-        file
-      end
-
-      # When a supervisor (launchd/systemd/nohup) redirected stdout to a regular
-      # file, wrap it so that file is rotated by size too.
-      def stdout_target(rotation_opts)
-        return $stdout unless rotation_opts[:enabled] && rotation_opts[:stdio]
-        return $stdout unless Rotation.regular_file_path($stdout)
-
-        StdioRotator.shared(max_bytes: rotation_opts[:max_bytes], max_files: rotation_opts[:max_files])
       end
 
       def prepare_log_path(path)
@@ -191,30 +193,56 @@ module Legion
         (@async == true && @async_writer&.alive?) || false
       end
 
-      # rubocop:disable Naming/PredicateMethod
-      def start_async_writer(buffer_size: 10_000)
-        require_relative 'async_writer'
-        return false if @async_writer&.alive? && stop_async_writer == false
+      def start_async_writer(buffer_size: 10_000, timeout: 2)
+        with_lifecycle_lock do
+          require_relative 'async_writer'
+          return false if @async_writer && stop_async_writer(timeout: timeout) == false
 
-        @async_writer = AsyncWriter.new(log, buffer_size: buffer_size)
-        @async_writer.start
-        @async = true
-        true
+          @async_writer = AsyncWriter.new(log, buffer_size: buffer_size)
+          log.async_writer = @async_writer
+          @async_writer.start
+          @async = true
+          true
+        end
       end
 
-      def stop_async_writer
-        writer = @async_writer
-        stopped = writer&.stop
-        return false if stopped == false
+      def stop_async_writer(timeout: 2)
+        with_lifecycle_lock do
+          return true unless @async_writer
 
-        close_replaced_log(writer.logger) if writer.respond_to?(:logger)
-        @async_writer = nil if @async_writer.equal?(writer)
-        @async = false
-        true
+          @async_writer.stop(timeout: timeout)
+        end
       end
-      # rubocop:enable Naming/PredicateMethod
 
       private
+
+      def open_log_file(path:, rotation_opts:)
+        if rotation_opts[:enabled]
+          return Legion::Logging::RotatingFile.new(path: path, max_bytes: rotation_opts[:max_bytes], max_files: rotation_opts[:max_files])
+        end
+
+        file = File.new(path, 'a')
+        file.sync = true
+        file
+      end
+
+      # Keep redirected stderr eligible even when stdout is a pipe or terminal.
+      def stdout_target(rotation_opts:)
+        return $stdout unless rotation_opts[:enabled] && rotation_opts[:stdio]
+        return $stdout unless Legion::Logging::Rotation.regular_file_path(io: $stdout) || Legion::Logging::Rotation.regular_file_path(io: $stderr)
+
+        Legion::Logging::StdioRotator.shared(max_bytes: rotation_opts[:max_bytes], max_files: rotation_opts[:max_files])
+      end
+
+      def with_lifecycle_lock
+        lock = LIFECYCLE_MUTEX.synchronize { @lifecycle_lock ||= Monitor.new }
+        entered = lock.try_enter
+        return false unless entered
+
+        yield
+      ensure
+        lock.exit if entered
+      end
 
       def close_replaced_log(logger)
         return unless logger

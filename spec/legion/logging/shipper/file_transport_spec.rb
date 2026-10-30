@@ -60,7 +60,9 @@ RSpec.describe Legion::Logging::Shipper::FileTransport do
                                               .and_return('/nonexistent_root_dir/siem.log')
       allow(FileUtils).to receive(:mkdir_p).and_raise(Errno::EACCES, 'permission denied')
 
-      expect(described_class.ship({ level: 'error', message: 'test' })).to be(false)
+      expect do
+        expect(described_class.ship({ level: 'error', message: 'test' })).to be(false)
+      end.to output(/permission denied/i).to_stderr
     end
 
     it 'falls back to DEFAULT_PATH when Legion::Settings is not defined' do
@@ -71,6 +73,25 @@ RSpec.describe Legion::Logging::Shipper::FileTransport do
       allow(File).to receive(:open).with(described_class::DEFAULT_PATH, 'a').and_yield(io)
       expect(io).to receive(:write).at_least(:once)
       described_class.ship({ level: 'warn', message: 'fallback' })
+    end
+
+    it 'writes to the default path without initializing unloaded settings' do
+      Dir.mktmpdir do |dir|
+        path = File.join(dir, 'default.log')
+        initialized = false
+        stub_const('Legion::Logging::Shipper::FileTransport::DEFAULT_PATH', path)
+        stub_const('Legion::Settings', Module.new)
+        allow(Legion::Settings).to receive(:loaded?).and_return(false)
+        allow(Legion::Settings).to receive(:dig) do
+          initialized = true
+          File.join(dir, 'configured.log')
+        end
+
+        event = { level: 'warn', message: 'before settings load' }
+        expect(described_class.ship(event)).to be(true)
+        expect(initialized).to be(false)
+        expect(JSON.parse(File.read(path))).to eq('level' => 'warn', 'message' => 'before settings load')
+      end
     end
   end
 

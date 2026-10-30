@@ -1,16 +1,105 @@
 # Legion::Logging Changelog
 
-## [1.5.7] - 2026-10-19
+## [1.5.20] - 2026-10-29
 
 ### Added
-- Size-based log rotation, on by default (100 MB x 5 archives), configurable via `logging.rotation`
+- Size-based log rotation, on by default (100 MiB x 5 archives), configurable via `logging.rotation`
   (`enabled`, `max_size_mb`, `max_files`, `stdio`) or `setup(rotation: {...})`; `rotation: false` disables it
 - `Legion::Logging::RotatingFile`: self-rotating append-mode device used for `log_file:`; reopens if another
   process rotated the path
 - `Legion::Logging::StdioRotator`: rotates the file behind stdout/stderr when a supervisor (launchd
   `StandardOutPath`, systemd `append:`) redirected them to an append-mode regular file, using `IO#reopen` so
-  raw stderr output is captured in the new file too. Fixes unbounded growth of the Homebrew service log
-  (`/opt/homebrew/var/log/legion/legion.log` reached 25.8 GB)
+  raw stderr output follows the new file. Checks are logger-write-driven, not a hard disk quota.
+
+### Fixed
+- Preserve current async OutputLogger routing, lifecycle locks, shutdown deadlines, and forwarding settings while integrating rotation (PR #21).
+- Honor instance logger rotation overrides and opt-out; rotate distinct stderr files independently, including when stdout is a pipe.
+- Preserve nested Settings lookup guards, normalize invalid limits, and reopen remembered paths after external rotation.
+- Keep non-regular devices untouched and report rotation failures without discarding the incoming message.
+
+## [1.5.19] - 2026-10-29
+
+### Changed
+- Document the complete async contract: bounded backpressure, producer snapshots, worker-side preparation, lifecycle deadlines, reentrant logging, and explicit synchronous boundaries (#22).
+- Correct writer callback signatures and describe delivery acknowledgement limits, retained Shipper retries, and raw Logger compatibility (#22).
+
+## [1.5.18] - 2026-10-29
+
+### Fixed
+- Preserve producer-side raw Logger admission and message/progname normalization: accepted `with_level` records are not filtered again, and a block's nil result reaches the formatter unchanged (#22).
+- Pass captured producer time to raw Logger formatters instead of the later worker dispatch time (#22).
+
+## [1.5.17] - 2026-10-29
+
+### Fixed
+- Make async regression cleanup nil-safe so setup failures are not replaced by secondary errors while releasing worker gates (#22; PR #23 review feedback).
+
+## [1.5.16] - 2026-10-29
+
+### Fixed
+- Preserve producer timestamps in text/JSON output and producer thread IDs in JSON, including queued standard Logger calls (#22).
+- Snapshot mutable raw Logger messages and context before enqueueing so later caller mutation cannot change accepted output.
+
+## [1.5.15] - 2026-10-29
+
+### Changed
+- Move normal log and both exception APIs' formatting, redaction, event enrichment, fingerprinting, and envelope preparation onto the async worker (#22).
+- Capture producer call sites, timestamps, thread/session context, and shallow input snapshots before enqueueing; preserve component-level overrides during worker output.
+- Honor configurable forwarding levels at `logging.transport.log_levels`, retaining warn/error/fatal by default and avoiding duplicate synchronous event construction.
+
+### Fixed
+- Avoid implicitly loading Settings from logging and shipping; early redaction defaults no longer hide custom patterns loaded later.
+
+## [1.5.14] - 2026-10-29
+
+### Fixed
+- Serialize logger-owned lifecycle transitions so concurrent startup cannot orphan a writer and discard its accepted backlog (#22).
+- Reject contending lifecycle calls without blocking callbacks behind their own shutdown join.
+- Retry retained shipping batches on a subsequent shutdown call after a previous delivery failure.
+
+## [1.5.13] - 2026-10-29
+
+### Fixed
+- Keep startup and shutdown draining on the writer, including accepted work without a running consumer; apply shutdown deadlines without synchronous fallback (#22).
+- Retain timed-out workers and queues, reject writes after shutdown, and avoid joining the writer from its own callback.
+- Stop the existing writer before reconfiguring outputs; a failed shutdown leaves the configuration intact instead of opening a synchronous bypass.
+
+## [1.5.12] - 2026-10-29
+
+### Fixed
+- Route opt-in MethodTracer output through configured async logging instead of direct producer-thread stdout writes (#22).
+- Keep failed shipping diagnostics out of the forwarding pipeline to avoid logging-to-shipper feedback loops, and add explicit HTTP write timeouts.
+- Clarify that direct transport/export APIs, MultiIO, and hook dispatch are synchronous primitives; their async callers own scheduling.
+
+## [1.5.11] - 2026-10-29
+
+### Fixed
+- Move threshold-triggered and explicit Shipper delivery onto one background worker; `flush(timeout:)` waits for delivery without performing sink IO on its caller (#22).
+- Bound accepted and in-flight shipping events with `logging.shipper.buffer_size` (default 10,000), preserve failed batches for retry, and wake the worker for flush/shutdown instead of sleeping through requests.
+
+## [1.5.10] - 2026-10-29
+
+### Fixed
+- Prevent writer callbacks and hooks from waiting on their own full queue: nested messages are written locally on the writer without recursively forwarding them (#22).
+- Preserve nested exception events as local JSON lines and bypass recursive formatting when necessary, without growing an overflow queue or dropping nested messages.
+
+## [1.5.9] - 2026-10-29
+
+### Fixed
+- Keep the standard Ruby Logger interface returned by `log`, including `add`, `log`, and raw append, on the configured async writer; preserve producer context for Sinatra/APM consumers (#22).
+- Route instance tracing through async logging and raise `ClosedQueueError` for rejected async writes instead of silently performing producer-thread IO.
+
+## [1.5.8] - 2026-10-29
+
+### Fixed
+- Queue structured exception publication for both `log_exception` and Helper `handle_exception`, keeping exception-writer callbacks off producer threads when async logging is enabled (#22).
+- Preserve captured exception metadata and callback envelopes while retaining synchronous publication for explicit synchronous logging.
+
+## [1.5.7] - 2026-10-29
+
+### Changed
+- Document bounded, lossless-in-process queue backpressure as the intentional async saturation policy: producers wait rather than silently dropping logs or growing the queue without a bound (#22).
+- Correct async fatal routing and the buffer-size configuration example.
 
 ## [1.5.6] - 2026-06-01
 

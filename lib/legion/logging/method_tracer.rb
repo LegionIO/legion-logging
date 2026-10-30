@@ -16,6 +16,8 @@ module Legion
 
           base_name = base.to_s
           tp = TracePoint.new(:call, :return) do |trace|
+            next if Thread.current[:legion_trace_emitting]
+
             next unless trace.defined_class == base || (match_singleton && trace.defined_class == base.singleton_class)
 
             stack = (Thread.current[:_legion_trace_stack] ||= [])
@@ -25,12 +27,12 @@ module Legion
               params = format_params(trace)
               params_segment = params.empty? ? '' : ", #{params.join(', ')}"
               indent = '  ' * stack.size
-              puts "#{indent}-> #{trace.method_id}, #{base_name}#{params_segment}"
+              emit_trace(message: "#{indent}-> #{trace.method_id}, #{base_name}#{params_segment}")
               stack.push(trace.method_id)
             when :return
               stack.pop
               indent = '  ' * stack.size
-              puts "#{indent}<- #{trace.method_id}, #{base_name}"
+              emit_trace(message: "#{indent}<- #{trace.method_id}, #{base_name}")
             end
           end
           tp.enable
@@ -51,6 +53,15 @@ module Legion
           ATTACHED.clear
         end
       end
+
+      def self.emit_trace(message:)
+        previous = Thread.current[:legion_trace_emitting]
+        Thread.current[:legion_trace_emitting] = true
+        Legion::Logging.unknown(message)
+      ensure
+        Thread.current[:legion_trace_emitting] = previous
+      end
+      private_class_method :emit_trace
 
       def self.format_params(trace_point)
         trace_point.parameters.filter_map do |type, name|

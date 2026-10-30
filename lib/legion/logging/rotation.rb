@@ -13,11 +13,11 @@ module Legion
     #    grows past +max_size_mb+ and reopens a fresh file.
     #
     # 2. stdout/stderr were redirected to a regular file by a supervisor
-    #    (launchd StandardOutPath, systemd StandardOutput=append:, nohup, ...).
-    #    The supervisor opened the file, so nothing outside the process can
-    #    rotate it safely. StdioRotator detects the path behind fd 1/2, renames
-    #    the file and re-points $stdout/$stderr at a fresh file with IO#reopen,
-    #    which also captures raw stderr output (thread crashes, C warnings).
+    #    (systemd StandardOutput=append:, shell >>, ...). Only append-mode
+    #    regular files are eligible. StdioRotator remembers their original
+    #    paths and reopens stdout/stderr after internal or external rotation.
+    #    Checks are driven by logger writes, at most once per second; raw
+    #    stdout/stderr writes alone do not trigger a check.
     #
     # Settings (Legion::Settings[:logging][:rotation] or setup(rotation: {...})):
     #   enabled:      true   # master switch
@@ -39,16 +39,26 @@ module Legion
       class << self
         # Normalizes rotation settings. Accepts nil, false (disabled), or a Hash
         # with symbol or string keys. Missing keys fall back to DEFAULTS.
-        def resolve(raw = nil)
-          return DEFAULTS.merge(enabled: false) if raw == false
-
-          overrides = raw.is_a?(Hash) ? raw.transform_keys(&:to_sym) : {}
+        def resolve(raw:)
+          overrides = if raw == false
+                        { enabled: false }
+                      elsif raw.is_a?(Hash)
+                        raw.transform_keys(&:to_sym)
+                      else
+                        {}
+                      end
           merged = DEFAULTS.merge(overrides.slice(*DEFAULTS.keys))
           merged[:enabled] = merged[:enabled] != false
           merged[:stdio] = merged[:stdio] != false
           merged[:max_size_mb] = positive_number(merged[:max_size_mb], DEFAULTS[:max_size_mb])
           merged[:max_files] = positive_number(merged[:max_files], DEFAULTS[:max_files]).to_i
-          merged[:max_bytes] = (merged[:max_size_mb] * 1024 * 1024).to_i
+          merged[:max_files] = DEFAULTS[:max_files] unless merged[:max_files].positive?
+          bytes = merged[:max_size_mb] * 1024 * 1024
+          unless bytes.finite?
+            merged[:max_size_mb] = DEFAULTS[:max_size_mb]
+            bytes = merged[:max_size_mb] * 1024 * 1024
+          end
+          merged[:max_bytes] = [bytes.to_i, 1].max
           merged
         end
 
@@ -56,22 +66,25 @@ module Legion
         # Guarded against re-entry because Settings may log while loading.
         def from_settings
           return nil unless defined?(Legion::Settings) && Legion::Settings.respond_to?(:[])
-          return nil if Legion::Settings.respond_to?(:loaded?) && !Legion::Settings.loaded?
           return nil if Thread.current[:legion_logging_rotation_lookup]
 
+          lookup_started = true
           Thread.current[:legion_logging_rotation_lookup] = true
+          return nil if Legion::Settings.respond_to?(:loaded?) && !Legion::Settings.loaded?
+
           logging = Legion::Settings[:logging]
           logging[:rotation] if logging.is_a?(Hash)
         rescue StandardError => e
           warn("Legion::Logging::Rotation.from_settings failed: #{e.class}: #{e.message}")
           nil
         ensure
-          Thread.current[:legion_logging_rotation_lookup] = nil
+          Thread.current[:legion_logging_rotation_lookup] = nil if lookup_started
         end
 
         # Shifts path.(n-1) -> path.n ... path -> path.1, dropping the oldest.
-        def shift_files(path, max_files)
-          FileUtils.rm_f("#{path}.#{max_files}")
+        def shift_files(path:, max_files:)
+          oldest = "#{path}.#{max_files}"
+          FileUtils.rm(oldest, force: false) if File.exist?(oldest)
           (max_files - 1).downto(1) do |i|
             src = "#{path}.#{i}"
             File.rename(src, "#{path}.#{i + 1}") if File.exist?(src)
@@ -82,13 +95,13 @@ module Legion
         # Returns the filesystem path behind an IO if it is a regular file opened
         # in append mode (launchd StandardOutPath, systemd append:, shell >>), or nil.
         # Non-append redirects (shell >) are left alone.
-        def regular_file_path(io)
+        def regular_file_path(io:)
           return nil unless io.respond_to?(:stat) && io.stat.file?
-          return nil unless append_mode?(io)
+          return nil unless append_mode?(io: io)
 
           path = fd_path(io)
           return nil unless path && File.file?(path)
-          return nil unless same_file?(io, path)
+          return nil unless same_file?(io: io, path: path)
 
           path
         rescue StandardError => e
@@ -96,24 +109,33 @@ module Legion
           nil
         end
 
-        def same_file?(io, path)
+        def same_file?(io:, path:)
+          return false unless File.exist?(path)
+
           io_stat = io.stat
           path_stat = File.stat(path)
           io_stat.ino == path_stat.ino && io_stat.dev == path_stat.dev
-        rescue SystemCallError, IOError
+        rescue SystemCallError, IOError => e
+          warn("Legion::Logging::Rotation.same_file? path=#{path} failed: #{e.class}: #{e.message}")
           false
         end
 
-        def append_mode?(io)
+        def append_mode?(io:)
           require 'fcntl'
           io.fcntl(Fcntl::F_GETFL).anybits?(File::APPEND)
-        rescue NotImplementedError, SystemCallError, IOError
+        rescue NotImplementedError, SystemCallError, IOError => e
+          warn("Legion::Logging::Rotation.append_mode? failed: #{e.class}: #{e.message}")
           false
         end
 
         private
 
         def fd_path(io)
+          if io.respond_to?(:path)
+            path = File.expand_path(io.path)
+            return path if same_file?(io: io, path: path)
+          end
+
           if RUBY_PLATFORM.include?('darwin')
             require 'fcntl'
             buf = "\0" * MAXPATHLEN
@@ -127,20 +149,21 @@ module Legion
 
         def positive_number(value, default)
           number = Float(value)
-          number.positive? ? number : default
-        rescue ArgumentError, TypeError
+          number.positive? && number.finite? ? number : default
+        rescue ArgumentError, TypeError => e
+          warn("Legion::Logging::Rotation invalid numeric limit: #{e.class}: #{e.message}")
           default
         end
       end
     end
 
-    # An append-mode File that rotates itself by size. Safe for concurrent
-    # writers in one process and detects rotation done by another instance
-    # writing the same path (inode change -> reopen).
+    # Serializes writes through this device and detects external rotation at the
+    # next check (inode change -> reopen). Separate devices and processes are
+    # not coordinated by this instance's lock.
     class RotatingFile
       attr_reader :file_path, :max_bytes, :max_files
 
-      def initialize(path, max_bytes:, max_files:)
+      def initialize(path:, max_bytes:, max_files:)
         @file_path = path
         @max_bytes = max_bytes
         @max_files = max_files
@@ -170,11 +193,11 @@ module Legion
       end
 
       def closed?
-        @io.closed?
+        @mutex.synchronize { @io.closed? }
       end
 
       def size
-        @io.size
+        @mutex.synchronize { @io.size }
       end
 
       def rotate!
@@ -194,7 +217,7 @@ module Legion
         return if now < @next_check
 
         @next_check = now + Rotation::CHECK_INTERVAL
-        unless Rotation.same_file?(@io, @file_path)
+        unless Rotation.same_file?(io: @io, path: @file_path)
           reopen
           return
         end
@@ -205,7 +228,9 @@ module Legion
       end
 
       def rotate_locked
-        Rotation.shift_files(@file_path, @max_files)
+        return false unless @io.stat.file?
+
+        Rotation.shift_files(path: @file_path, max_files: @max_files)
         reopen
       end
 
@@ -243,14 +268,18 @@ module Legion
       def initialize(max_bytes:, max_files:, stdout: $stdout, stderr: $stderr)
         @stdout = stdout
         @stderr = stderr
+        @stdout_path = Rotation.regular_file_path(io: stdout)
+        @stderr_path = Rotation.regular_file_path(io: stderr)
         @mutex = Mutex.new
         @next_check = 0.0
         configure(max_bytes: max_bytes, max_files: max_files)
       end
 
       def configure(max_bytes:, max_files:)
-        @max_bytes = max_bytes
-        @max_files = max_files
+        @mutex.synchronize do
+          @max_bytes = max_bytes
+          @max_files = max_files
+        end
       end
 
       def write(*messages)
@@ -261,7 +290,7 @@ module Legion
       end
 
       def flush
-        @stdout.flush
+        @mutex.synchronize { @stdout.flush }
         self
       end
 
@@ -275,7 +304,7 @@ module Legion
       def sync=(_value); end
 
       def rotate!
-        @mutex.synchronize { rotate_stdio }
+        @mutex.synchronize { rotate_stdio(force: true) }
       end
 
       private
@@ -285,34 +314,49 @@ module Legion
         return if now < @next_check
 
         @next_check = now + Rotation::CHECK_INTERVAL
-        @stdout.flush
-        stat = @stdout.stat
-        rotate_stdio if stat.file? && stat.size >= @max_bytes
+        rotate_stdio
       rescue SystemCallError, IOError => e
         warn("Legion::Logging::StdioRotator#rotate_if_needed failed: #{e.class}: #{e.message}")
       end
 
-      def rotate_stdio # rubocop:disable Naming/PredicateMethod
-        out_path = Rotation.regular_file_path(@stdout)
-        return false unless out_path
+      def rotate_stdio(force: false)
+        @stdout.flush if @stdout_path
+        @stderr.flush if @stderr_path
+        shared = shared_file?
+        out_changed = rotate_stream(io: @stdout, path: @stdout_path, force: force)
 
-        err_path = Rotation.regular_file_path(@stderr)
-        err_shared = err_path == out_path
-
-        @stdout.flush
-        @stderr.flush if err_path
-        Rotation.shift_files(out_path, @max_files)
-        @stdout.reopen(out_path, 'a')
-        @stdout.sync = true
-
-        if err_shared
-          @stderr.reopen(@stdout)
-        elsif err_path && File.size(err_path) >= @max_bytes
-          Rotation.shift_files(err_path, @max_files)
-          @stderr.reopen(err_path, 'a')
+        if shared && out_changed
+          @stderr.reopen(@stdout) unless @stderr.equal?(@stdout)
+          @stderr.sync = true
+          return true
         end
-        @stderr.sync = true if err_path
+
+        err_changed = rotate_stream(io: @stderr, path: @stderr_path, force: force) unless shared
+        out_changed || !!err_changed
+      end
+
+      def shared_file?
+        return false unless @stdout_path && @stderr_path
+
+        out_stat = @stdout.stat
+        err_stat = @stderr.stat
+        out_stat.ino == err_stat.ino && out_stat.dev == err_stat.dev
+      end
+
+      def rotate_stream(io:, path:, force:)
+        return false unless path
+
+        if Rotation.same_file?(io: io, path: path)
+          return false unless force || io.stat.size >= @max_bytes
+
+          Rotation.shift_files(path: path, max_files: @max_files)
+        end
+        io.reopen(path, 'a')
+        io.sync = true
         true
+      rescue SystemCallError, IOError => e
+        warn("Legion::Logging::StdioRotator path=#{path} failed: #{e.class}: #{e.message}")
+        false
       end
     end
   end

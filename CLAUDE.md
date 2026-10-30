@@ -2,46 +2,55 @@
 
 Structured logging framework for LegionIO. Provides colorized console output (Rainbow), structured JSON logging, and a consistent interface across all Legion gems and extensions.
 
-**GitHub**: https://github.com/LegionIO/legion-logging
-**Version**: 1.5.7
-
 ## Architecture
 
 ```
 Legion::Logging (singleton module)
 ├── Methods           # debug, info, warn, error, fatal, unknown; log_exception
 ├── Builder           # Output destination, log level, formatter, async: keyword
-├── AsyncWriter       # Non-blocking SizedQueue-backed writer thread
+├── AsyncWriter       # Bounded, backpressured SizedQueue-backed writer thread
+├── OutputLogger      # Queues standard Logger add/log/<< calls
 ├── Hooks             # Callback registry for fatal/error/warn events
 ├── EventBuilder      # Structured event payload + fingerprint for dedup
 ├── Helper            # Injectable log mixin for LEX extensions
 ├── TaggedLogger      # Prepends structured tags to each message
 ├── CategoryRegistry  # Named log categories with expected_fields
 ├── SIEMExporter      # PHI-redacting SIEM export (Splunk HEC, ELK)
-├── Shipper           # Buffered forwarding (FileTransport, HttpTransport)
+├── Shipper           # Bounded batch-delivery worker (file/HTTP transports)
 ├── Redactor          # PII/PHI + secret pattern redaction (opt-in)
-├── MultiIO           # Write to multiple destinations simultaneously
-└── Rotation          # Size-based rotation: RotatingFile (log_file) + StdioRotator (launchd/systemd stdout)
+├── MultiIO           # Synchronous, sequential writes to multiple destinations
+└── Rotation          # RotatingFile (log_file) + shared StdioRotator (redirected stdout/stderr)
 
 # Module-level writer lambdas (pluggable forwarding slots)
-Legion::Logging.log_writer       # ->(event, routing_key:) {}
+Legion::Logging.log_writer       # ->(event, routing_key:, headers:, properties:) {}
 Legion::Logging.exception_writer # ->(event, routing_key:, headers:, properties:) {}
 ```
 
 ## Key Patterns
 
 - **Singleton module** — `class << self`; called directly: `Legion::Logging.info("msg")`
-- **Async by default** — `setup` enables async logging; fatal bypasses queue. Buffer size via `Settings[:logging][:async][:buffer_size]` (default 10,000). Back-pressure blocks callers when full.
+- **Async by default** — `setup` queues all levels, including fatal, plus structured exception publication and raw Logger calls. Buffer size via `Settings[:logging][:async][:buffer_size]` (default 10,000 entries, not bytes). Saturation blocks producers rather than dropping logs or growing the queue without bound.
 - **Structured JSON** — `format: :json` outputs machine-parseable JSON lines (disables color)
+- **Producer/worker boundary** — Producers evaluate message blocks and capture caller/context plus shallow snapshots. Formatting, event enrichment, fingerprinting, and publication run on the worker. Nested payload objects are not deep-copied. Built-in output retains producer time/thread; raw Logger output retains admission, normalized payload, and formatter time.
+- **Lifecycle** — `stop_async_writer(timeout: 2)` closes admission and drains on the worker; timeout or lifecycle contention returns false. No caller-thread drain or synchronous rejection fallback. Stopped async loggers raise `ClosedQueueError` until restart or explicit `setup(async: false)`. Setup file operations remain synchronous.
+- **Delivery semantics** — Successful shutdown means processing finished, not durable delivery or external acknowledgement. AsyncWriter diagnoses failures locally without retry; Shipper retains failed batches for retry.
 - **Helper mixin** — `Legion::Logging::Helper` injects into LEX extensions; derives tags from `segments`, `lex_filename`, or class name
 - **Writer lambdas** — `log_writer` and `exception_writer` are module-level lambda slots for forwarding to external systems (AMQP, etc.). Default no-ops.
 - **Redactor** — Opt-in (`logging.redaction.enabled: true`). Patterns: SSN, phone, MRN, DOB, Vault tokens, JWTs, bearer tokens, lease IDs. Guards against Settings recursive init.
 - **Hook callbacks** — `on_fatal`, `on_error`, `on_warn` register procs; gated by `enable_hooks!`/`disable_hooks!`; fire on async writer thread
+- **Reentrant logging** — Callback/hook logs stay local on the worker without recursively forwarding or waiting on its own queue. Nested exception events and recursive formatter diagnostics use local JSON lines.
+- **Forwarding levels** — `logging.transport.log_levels` accepts strings/symbols; absent or empty lists default to warn/error/fatal. Settings guards use defaults while Settings is unloaded rather than initializing it.
+- **Synchronous APIs** — `MultiIO`, direct transport delivery, SIEM export, and direct hook dispatch remain synchronous. Shipper filtering/redaction run on its caller; bounded batch delivery runs on its worker.
 - **EventBuilder** — Structured event hashes from log context (caller, exception, lex identity). `fingerprint` produces MD5 for dedup.
+- **Rotation** — Enabled by default at 100 MiB with five archives; `rotation: false` disables it, `stdio: false` excludes inherited streams. Only append-mode regular stdout/stderr files qualify, checked independently. Logger writes trigger checks at most once per second; raw-only traffic and bursts can exceed thresholds. Rotation runs on the async writer, not an independent timer. Per-device locks do not coordinate separate processes.
 
 ## Role in LegionIO
 
 Foundational gem — dependency of `legion-cache`, `legion-data`, and `LegionIO`. First module initialized during `Legion::Service` startup.
 
----
-**Maintained By**: Matthew Iverson (@Esity)
+## Backtrace Limit
+
+- `settings[:logging][:backtrace_limit]` — `nil` = full trace, `0` = suppress entirely, `N` = cap at N frames
+- Per-call override: `log_exception(err, backtrace_limit: 5)`
+- Read at runtime via `Legion::Settings.dig(:logging, :backtrace_limit)` after checking Settings is loaded; otherwise use the default without triggering initialization.
+
